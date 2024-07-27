@@ -17,7 +17,7 @@ After download build binaries, you should run **setup.bat** to ensure working en
 ## Usage
 
     
-    Usage: debug [/D] [/G] [/Q] [/S] <command> ...
+    Usage: debug [/D] [/G] [/Q] [/S] executable [...]
     
     Description:
     This tool is used to debug an executable on 64-bit Windows OS.
