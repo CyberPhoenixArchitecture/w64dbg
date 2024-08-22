@@ -10,8 +10,9 @@
 #include "addr.c"
 #include "exception.c"
 #include "fsize.c"
+#include "memrchr.c"
 
-#define MAX_THREAD 64
+#define MAX_THREAD 256
 #define MAX_DLL 64
 #define GNU 2
 #define LATENCY 99
@@ -20,21 +21,22 @@
 #define _DebugSymOptions (SymOptions | SYMOPT_LOAD_LINES)
 #define NDebugSymOptions (SymOptions | SYMOPT_NO_CPP)
 
+#define GCXX_RUNTIME_EXCEPTION 541541187
+
 int main(int argc, char *argv[])
 {
-    if (argc < 2)
-    {
-        fwrite(
-            "ERROR: Invalid syntax.\n"
-            "Type \"debug /?\" for usage.\n"
-            , 1, 50, stderr);
-        return 1;
-    }
-    char buffer[4096];
-    int temp, i, debug = FALSE, verbose = TRUE, start = FALSE;
+    char buffer[65536];
+    int temp, i, breakpoint = FALSE, firstbreak = FALSE, debug = FALSE,
+    output = FALSE, timeout = 0, vexception = TRUE, verbose = FALSE, start = FALSE;
     for (i = 1; i < argc; ++i)
         if (argv[i][0] == '/') switch(argv[i][1])
         {
+            case 'B':
+                if (argv[i][2] == '\0')
+                {
+                    breakpoint = TRUE;
+                    break;
+                }
             case 'D':
                 if (argv[i][2] == '\0')
                 {
@@ -50,7 +52,13 @@ int main(int argc, char *argv[])
             case 'Q':
                 if (argv[i][2] == '\0')
                 {
-                    verbose = FALSE;
+                    vexception = FALSE;
+                    break;
+                }
+            case 'O':
+                if (argv[i][2] == '\0')
+                {
+                    output = TRUE;
                     break;
                 }
             case 'S':
@@ -59,36 +67,77 @@ int main(int argc, char *argv[])
                     start = TRUE;
                     break;
                 }
+            case 'T':
+                if (argv[i][2] == '\0')
+                {
+                    if (++i >= argc)
+                    {
+                        printf("ERROR: Invalid syntax. Value expected for '/T'\n"
+                            "Type \"debug /?\" for usage.\n");
+                        exit(1);
+                    } else if ((argv[i][0] == '-' && !isdigit(argv[i][1])) ||
+                        (argv[i][0] != '-' && !isdigit(argv[i][0])) ||
+                        (timeout = atoi(argv[i])) > 99999 ||
+                        timeout < -1)
+                    {
+                        printf("ERROR: Invalid value for timeout (/T) specified. Valid range is -1 to 99999.\n");
+                        exit(1);
+                    }
+                    timeout = atoi(argv[i]);
+                    break;
+                }
+            case 'V':
+                if (argv[i][2] == '\0')
+                {
+                    verbose = TRUE;
+                    break;
+                }
             case '?':
                 if (argv[i][2] == '\0')
                 {
-                    fwrite(
-                        "Usage: debug [/D] [/G] [/Q] [/S] executable [...]\n\n"
+                    printf(
+                        "Usage: debug [...] executable [...]\n\n"
                         "Description:\n"
                         "This tool is used to debug an executable on 64-bit Windows OS.\n\n"
                         "Parameter List:\n"
-                        "/D Load debug symbols.\n"
-                        "/G Load debug symbols in DWARF format.\n"
-                        "/Q Do not display verbose information.\n"
+                        "/B Do not ignore breakpoints.\n"
+                        "/D Load executable debug symbols.\n"
+                        "/G Load executable debug symbols in DWARF format.\n"
+                        "/Q Do not display verbose exception information.\n"
+                        "/O Display OutputDebugString string.\n"
                         "/S Start executable with a new console.\n"
-                        , 1, 285, stderr);
+                        "/T Specify to wait for the specified time period (in seconds)\n"
+                        "                                 or until any key is pressed.\n"
+                        "/V Display verbose debug information. \n");
+                    exit(0);
                 }
-                return 0;
             default:
                 printf("ERROR: Invalid argument/option - '%s'\n"
                     "Type \"debug /?\" for usage.\n", argv[i]);
-                return 1;
+                exit(1);
         }
         else break;
-    int j, count;
-    count = i;
-    j = strlen(argv[i]);
-    if (!memchr(argv[i], '.', j))
+    if (argc < 2 || i == argc)
     {
-        memcpy(&argv[i][j], ".exe", 5);
-        j += 4;
+        printf(
+            "ERROR: Invalid syntax.\n"
+            "Type \"debug /?\" for usage.\n");
+        exit(1);
     }
-    memcpy(buffer, argv[i], j);
+    int j, count;
+    char _buffer[4096];
+    j = SearchPathA(NULL, argv[i], ".exe", sizeof(_buffer), _buffer, NULL);
+    if (j == 0)
+    {
+        printf("ERROR: No such file or directory.\n");
+        exit(1);
+    }
+    if (GetBinaryTypeA(_buffer, (LPDWORD) &count) == 0)
+    {
+        printf("ERROR: Exec format error.\n");
+        exit(1);
+    }
+    memcpy(buffer, _buffer, j);
     ++i;
     while (i < argc)
     {
@@ -99,120 +148,56 @@ int main(int argc, char *argv[])
         j += temp;
         ++i;
     }
-    char *p, _buffer[4096];
+    char *p;
     PROCESS_INFORMATION processInfo;
     STARTUPINFO startupInfo = {sizeof(startupInfo)};
+    DEBUG_EVENT DebugEvent;
+    LPVOID lpBaseOfDll[MAX_DLL];
+    HANDLE hThread[MAX_THREAD], hFile[MAX_DLL];
+    DWORD dwThreadId[MAX_THREAD] = {}, DLLInit[MAX_DLL] = {};
+    buffer[j] = '\0';
     if (debug == GNU)
     {
-        DWORD dwRead;
-        BOOL isDebugged;
-        char *str, *next, *ptr, *_ptr;
-        PROCESS_INFORMATION GDBInfo;
-        HANDLE hStdoutReadPipe, hStdoutWritePipe;
-        SECURITY_ATTRIBUTES saAttr = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
-        _searchenv("gdb.exe", "PATH", _buffer);
-        CreatePipe(&hStdoutReadPipe, &hStdoutWritePipe, &saAttr, 0);
-        if (start) CreateProcessA(argv[count], buffer, NULL, NULL, FALSE,
-            CREATE_NEW_CONSOLE | CREATE_SUSPENDED,
+        if (start) CreateProcessA(_buffer, buffer, NULL, NULL, FALSE,
+            CREATE_NEW_CONSOLE,
             NULL, NULL, &startupInfo, &processInfo);
-        else CreateProcessA(argv[count], buffer, NULL, NULL, FALSE,
-            CREATE_SUSPENDED,
+        else CreateProcessA(_buffer, buffer, NULL, NULL, FALSE,
+            CREATE_PRESERVE_CODE_AUTHZ_LEVEL,
             NULL, NULL, &startupInfo, &processInfo);
-        startupInfo.hStdOutput = hStdoutWritePipe;
-        startupInfo.dwFlags = STARTF_USESTDHANDLES;
-        memcpy(buffer, "gdb.exe -q -batch -ex=cont -ex=bt -p ", 37);
-        _ultoa(processInfo.dwProcessId, buffer + 37, 10);
-        CreateProcessA(_buffer, buffer, NULL, NULL, TRUE, 0,
-            NULL, NULL, &startupInfo, &GDBInfo);
-        CloseHandle(hStdoutWritePipe);
-        CloseHandle(GDBInfo.hThread);
-        CloseHandle(GDBInfo.hProcess);
-        while (TRUE)
-        {
-            Sleep(LATENCY);
-            CheckRemoteDebuggerPresent(processInfo.hProcess,
-                &isDebugged);
-            if (isDebugged) break;
-        }
-        ResumeThread(processInfo.hThread);
-        CloseHandle(processInfo.hThread);
-        WaitForSingleObjectEx(processInfo.hProcess, INFINITE, 0);
-        CloseHandle(processInfo.hProcess);
-        if (!ReadFile(hStdoutReadPipe, buffer, sizeof(buffer), &dwRead, NULL) ||
-            dwRead == 0) return 0;
-        if (verbose) printf(buffer);
-        else
-        {
-            str = _buffer;
-            p = strstr(buffer, "\n#") + 1;
-            if (p == (char *) 1) p = buffer;
-            while (TRUE)
-            {
-                next = (char *) memchr(p, '\n', buffer + dwRead - p) + 1;
-                temp = next - p;
-                ptr = (char *) memchr(p, '!', temp);
-                _ptr = ptr + 1;
-                if (ptr && *_ptr == '.')
-                {
-                    i = _ptr - p;
-                    memcpy(str, p, i);
-                    str += i;
-                    *str = '_';
-                    ++str;
-                    *str = '_';
-                    ++str;
-                    ++i;
-                    memcpy(str, _ptr + 1, temp - i);
-                    str += temp - i;
-                }
-                else
-                {
-                    memcpy(str, p, temp);
-                    str += temp;
-                    *(next - 1) = '\0';
-                    ptr = strrchr(p, ')') + 1;
-                    if (strncmp(ptr, " at ", 4) == 0)
-                    {
-                        ptr += 4;
-                        _ptr = (char *) strrchr(ptr, ':');
-                        *_ptr = '\0';
-                        str = FormatSourceCode(ptr, atoi(_ptr + 1), str);
-                    }
-                }
-                if (*next != '#') break;
-                p = next;
-            }
-        }
-        CloseHandle(hStdoutReadPipe);
-        if (!verbose) fwrite(_buffer, 1, str - _buffer, stderr);
-        return 0;
+        DebugActiveProcess(processInfo.dwProcessId);
     }
-    DEBUG_EVENT DebugEvent;
-    LPVOID lpBaseOfDll[MAX_DLL] = {};
-    HANDLE hThread[MAX_THREAD] = {}, hFile[MAX_DLL] = {};
-    DWORD dwThreadId[MAX_THREAD] = {}, DLLInit[MAX_DLL] = {};
-    if (start) CreateProcessA(argv[count], buffer, NULL, NULL, FALSE,
-        CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
-        NULL, NULL, &startupInfo, &processInfo);
-    else CreateProcessA(argv[count], buffer, NULL, NULL, FALSE,
-        DEBUG_ONLY_THIS_PROCESS,
-        NULL, NULL, &startupInfo, &processInfo);
+    else
+    {
+        if (start) CreateProcessA(_buffer, buffer, NULL, NULL, FALSE,
+            CREATE_NEW_CONSOLE | DEBUG_ONLY_THIS_PROCESS,
+            NULL, NULL, &startupInfo, &processInfo);
+        else CreateProcessA(_buffer, buffer, NULL, NULL, FALSE,
+            DEBUG_ONLY_THIS_PROCESS,
+            NULL, NULL, &startupInfo, &processInfo);
+    }
     WaitForDebugEvent(&DebugEvent, INFINITE);
     CloseHandle(DebugEvent.u.CreateProcessInfo.hProcess);
     CloseHandle(DebugEvent.u.CreateProcessInfo.hThread);
     ContinueDebugEvent(DebugEvent.dwProcessId, DebugEvent.dwThreadId, DBG_CONTINUE);
     hThread[0] = processInfo.hThread;
     dwThreadId[0] = processInfo.dwThreadId;
-    hFile[0] = DebugEvent.u.CreateProcessInfo.hFile;
     lpBaseOfDll[0] = DebugEvent.u.CreateProcessInfo.lpBaseOfImage;
+    if (debug == TRUE) hFile[0] = DebugEvent.u.CreateProcessInfo.hFile;
+    else CloseHandle(DebugEvent.u.CreateProcessInfo.hFile);
     while (TRUE)
     {
         WaitForDebugEvent(&DebugEvent, INFINITE);
         switch (DebugEvent.dwDebugEventCode)
         {
             case LOAD_DLL_DEBUG_EVENT:
+                if (verbose)
+                {
+                    GetFinalPathNameByHandleA(DebugEvent.u.LoadDll.hFile,
+                        buffer, sizeof(buffer), FILE_NAME_OPENED);
+                    printf("LoadDll %s\n", buffer);
+                }
                 //Find storage position
-                for (i = 1; i < MAX_DLL; ++i) if (DLLInit[i] == 0)
+                for (i = 1; i < MAX_DLL; ++i) if (!DLLInit[i])
                 {
                     DLLInit[i] = 1;
                     hFile[i] = DebugEvent.u.LoadDll.hFile;
@@ -225,6 +210,12 @@ int main(int argc, char *argv[])
                 for (i = 1; i < MAX_DLL; ++i)
                     if (DebugEvent.u.UnloadDll.lpBaseOfDll == lpBaseOfDll[i])
                 {
+                    if (verbose)
+                    {
+                        GetFinalPathNameByHandleA(hFile[i],
+                            buffer, sizeof(buffer), FILE_NAME_OPENED);
+                        printf("UnloadDll %s\n", buffer);
+                    }
                     CloseHandle(hFile[i]);
                     if (DLLInit[i] == 2) SymUnloadModule64(processInfo.hProcess,
                         (DWORD64) DebugEvent.u.UnloadDll.lpBaseOfDll);
@@ -233,8 +224,14 @@ int main(int argc, char *argv[])
                 }
                 break;
             case CREATE_THREAD_DEBUG_EVENT:
+                if (verbose)
+                {
+                    printf("CreateThread %ux%u\n",
+                        DebugEvent.dwProcessId,
+                        DebugEvent.dwThreadId);
+                }
                 //Find storage position
-                for (i = 0; i < MAX_THREAD; ++i) if (dwThreadId[i] == 0)
+                for (i = 0; i < MAX_THREAD; ++i) if (!dwThreadId[i])
                 {
                     hThread[i] = DebugEvent.u.CreateThread.hThread;
                     dwThreadId[i] = DebugEvent.dwThreadId;
@@ -242,6 +239,12 @@ int main(int argc, char *argv[])
                 }
                 break;
             case EXIT_THREAD_DEBUG_EVENT:
+                if (verbose)
+                {
+                    printf("ExitThread %ux%u\n",
+                        DebugEvent.dwProcessId,
+                        DebugEvent.dwThreadId);
+                }
                 //Find specific thread
                 for (i = 0; i < MAX_THREAD; ++i) if (DebugEvent.dwThreadId == dwThreadId[i])
                 {
@@ -251,40 +254,74 @@ int main(int argc, char *argv[])
                 }
                 break;
             case EXIT_PROCESS_DEBUG_EVENT:
+                if (verbose)
+                {
+                    printf("ExitProcess %ux%u\n",
+                        DebugEvent.dwProcessId,
+                        DebugEvent.dwThreadId);
+                }
                 for (i = 1; i < MAX_DLL; ++i) if (DLLInit[i] != 0)
                 {
                     CloseHandle(hFile[i]); //May fail for first time
                     if (DLLInit[i] == 2) SymUnloadModule64(processInfo.hProcess,
                         (DWORD64) lpBaseOfDll[i]);
                 }
-                CloseHandle(hFile[0]);
-                if (DLLInit[0])
+                if (debug == TRUE)
                 {
-                    if (debug) SymUnloadModule64(processInfo.hProcess,
-                        (DWORD64) lpBaseOfDll[0]);
-                    SymCleanup(processInfo.hProcess);
+                    CloseHandle(hFile[0]);
+                    if (DLLInit[0])
+                    {
+                        SymUnloadModule64(processInfo.hProcess,
+                            (DWORD64) lpBaseOfDll[0]);
+                        SymCleanup(processInfo.hProcess);
+                    }
                 }
+                else if (DLLInit[0]) SymCleanup(processInfo.hProcess);
                 CloseHandle(processInfo.hProcess);
                 for (i = 0; i < MAX_THREAD; ++i) if (DebugEvent.dwThreadId == dwThreadId[i])
                 {
                     CloseHandle(hThread[i]);
                     break;
                 }
-                return 0;
+                if (timeout)
+                {
+                    sprintf(buffer, "timeout %d", timeout);
+                    system(buffer);
+                }
+                exit(0);
+            case OUTPUT_DEBUG_STRING_EVENT:
+                if (output == TRUE)
+                {
+                    SIZE_T NumberOfBytesRead;
+                    ReadProcessMemory(processInfo.hProcess,
+                        DebugEvent.u.DebugString.lpDebugStringData,
+                        buffer, DebugEvent.u.DebugString.nDebugStringLength,
+                        &NumberOfBytesRead);
+                    printf(buffer);
+                }
+                break;
             case EXCEPTION_DEBUG_EVENT:
                 //ignore first-chance breakpoints && thread naming exception
-                if (DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x80000003 || //EXCEPTION_BREAKPOINT
-                DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x4000001F || //STATUS_WX86_BREAKPOINT
-                DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x406D1388) //MS_VC_EXCEPTION
+                //GCXX_RUNTIME_EXCEPTION
+                if (DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 541541187)
                     break;
-                ContinueDebugEvent(DebugEvent.dwProcessId,
-                    DebugEvent.dwThreadId,
-                    DBG_EXCEPTION_NOT_HANDLED);
+                if ((breakpoint == FALSE && (
+                DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x80000003 || //EXCEPTION_BREAKPOINT
+                DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x4000001F || //STATUS_WX86_BREAKPOINT
+                DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x406D1388)) || //MS_VC_EXCEPTION
+                (breakpoint == TRUE && ++firstbreak == TRUE))
+                    break;
                 //Terminate and exit
-                if (!DebugEvent.u.Exception.dwFirstChance) break;
                 for (i = 0; i < MAX_THREAD; ++i) if (DebugEvent.dwThreadId == dwThreadId[i])
                     break;
-                if (DebugEvent.dwThreadId != dwThreadId[i]) continue;
+                if (DebugEvent.u.Exception.dwFirstChance == 0 ||
+                    DebugEvent.dwThreadId != dwThreadId[i])
+                {
+                    ContinueDebugEvent(DebugEvent.dwProcessId,
+                        DebugEvent.dwThreadId,
+                        DBG_EXCEPTION_NOT_HANDLED);
+                    continue;
+                }
                 char *name;
                 BOOL bWow64;
                 CONTEXT Context;
@@ -299,7 +336,7 @@ int main(int argc, char *argv[])
                 {
                     DLLInit[0] = TRUE;
                     SymInitialize(processInfo.hProcess, NULL, FALSE);
-                    if (debug)
+                    if (debug == TRUE)
                     {
                         SymSetOptions(_DebugSymOptions);
                         SymLoadModuleEx(processInfo.hProcess,
@@ -326,16 +363,12 @@ int main(int argc, char *argv[])
                         0);
                     DLLInit[j] = 2;
                 }
-                memcpy(buffer, "Thread #.. caused ", 18);
-                temp = i + 1;
-                buffer[8] = '0' + temp / 10;
-                buffer[9] = '0' + temp % 10;
-                p = buffer + 18;
+                p = buffer + sprintf(buffer, "Thread #%02u caused ", temp + 1);
                 IsWow64Process(processInfo.hProcess, &bWow64);
                 p = FormatDebugException(&DebugEvent, p, _buffer, bWow64);
                 *p = '\n';
                 ++p;
-                if (verbose)
+                if (vexception)
                 {
                     p = FormatVerboseDebugException(p, 
                         DebugEvent.u.Exception.ExceptionRecord.ExceptionCode);
@@ -372,8 +405,8 @@ int main(int argc, char *argv[])
                 {
                     StackWalk64(MachineType, processInfo.hProcess, hThread[i], &StackFrame,
                         &Context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
-                    if (!SymFromAddr(processInfo.hProcess,
-                        StackFrame.AddrPC.Offset, &Displacement64, pSymbol))
+                    if (SymFromAddr(processInfo.hProcess,
+                        StackFrame.AddrPC.Offset, &Displacement64, pSymbol) == 0)
                         break;
                     *p = '#';
                     ++p;
@@ -383,7 +416,6 @@ int main(int argc, char *argv[])
                         *p = '0' + count / 10;
                         ++p;
                         *p = '0' + count % 10;
-                        ++p;
                     }
                     ++p;
                     *p = ' ';
@@ -415,9 +447,9 @@ int main(int argc, char *argv[])
                     temp = K32GetModuleFileNameExA(processInfo.hProcess,
                         (HMODULE) SymGetModuleBase64(processInfo.hProcess,
                             StackFrame.AddrPC.Offset),
-                        _buffer, 4096);
-                    name = (char *) strrchr(_buffer, '\\') + 1;
-                    j = strrchr(name, '.') - name;
+                        _buffer, sizeof(_buffer));
+                    name = (char *) memrchr(_buffer, '\\', temp) + 1;
+                    j = (char *) memrchr(name, '.', _buffer + temp - name) - name;
                     memcpy(p, name, j);
                     p += j;
                     *p = '!';
@@ -444,7 +476,7 @@ int main(int argc, char *argv[])
                     ++p;
                     memcpy(p, _buffer, temp);
                     p += temp;
-                    if (debug && SymGetLineFromAddr64(processInfo.hProcess,
+                    if (debug == TRUE && SymGetLineFromAddr64(processInfo.hProcess,
                         StackFrame.AddrPC.Offset, &Displacement, &Line))
                     {
                         *p = ' ';
@@ -461,7 +493,82 @@ int main(int argc, char *argv[])
                     ++p;
                     ++count;
                 }
-                fwrite(buffer, 1, p - buffer, stderr);
+                if (debug == GNU)
+                {
+                    if (SearchPathA(NULL, "gdb.exe", NULL, sizeof(_buffer), _buffer, NULL))
+                    {
+                        BOOL isDebugged;
+                        int iter, line, k;
+                        DWORD dwRead, dwFRead;
+                        PROCESS_INFORMATION GDBInfo;
+                        char src[4096], *str, *next, *ptr, *_ptr;
+                        HANDLE hStdoutReadPipe, hStdoutWritePipe;
+                        SECURITY_ATTRIBUTES saAttr = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
+                        SuspendThread(hThread[i]);
+                        ContinueDebugEvent(DebugEvent.dwProcessId,
+                            DebugEvent.dwThreadId,
+                            DBG_EXCEPTION_NOT_HANDLED);
+                        DebugActiveProcessStop(DebugEvent.dwProcessId);
+                        memcpy(p, "gdb.exe -q -batch -x=gdbinit -ex=cont -ex=bt -p ", 48);
+                        _ultoa(DebugEvent.dwProcessId, p + 48, 10);
+                        CreatePipe(&hStdoutReadPipe, &hStdoutWritePipe, &saAttr, 0);
+                        startupInfo.hStdOutput = hStdoutWritePipe;
+                        startupInfo.dwFlags = STARTF_USESTDHANDLES;
+                        CreateProcessA(_buffer, p, NULL, NULL, TRUE,
+                            CREATE_NO_WINDOW,
+                            NULL, NULL, &startupInfo, &GDBInfo);
+                        CloseHandle(hStdoutWritePipe);
+                        CloseHandle(GDBInfo.hThread);
+                        CloseHandle(GDBInfo.hProcess);
+                        while (TRUE)
+                        {
+                            SleepEx(LATENCY, FALSE);
+                            CheckRemoteDebuggerPresent(processInfo.hProcess,
+                                &isDebugged);
+                            if (isDebugged) break;
+                        }
+                        ResumeThread(hThread[i]);
+                        iter = 0;
+                        while (TRUE)
+                        {
+                            if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
+                                &dwRead, NULL) == 0) || !dwRead) break;
+                            str = (char *) memchr(_buffer, '#', dwRead);
+                            if (str == NULL) continue;
+                            while (TRUE)
+                            {
+                                next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
+                                if (iter >= count)
+                                {
+                                    temp = next - str;
+                                    memcpy(p, str, temp);
+                                    p += temp;
+                                    if ((ptr = strstr(str, ") at ") + 5) > (char *) 5)
+                                    {
+                                        _ptr = (char *) memrchr(ptr, ':', next - ptr);
+                                        *_ptr = '\0';
+                                        *(next - 1) = '\0';
+                                        k = atoi(_ptr + 1);
+                                        p = FormatSourceCode(ptr, k, p);
+                                    }
+                                }
+                                ++iter;
+                                if (*next != '#') break;
+                                str = next;
+                            }
+                        }
+                    }
+                    else if (verbose)
+                    {
+                        memcpy(p, "gdb.exe: No such file or directory.\n", 36);
+                        p += 36;
+                    }
+                } else ContinueDebugEvent(DebugEvent.dwProcessId,
+                    DebugEvent.dwThreadId,
+                    DBG_EXCEPTION_NOT_HANDLED);
+                *p = '\0';
+                printf(buffer);
+                if (debug == GNU) exit(0);
                 continue;
         }
         ContinueDebugEvent(DebugEvent.dwProcessId, DebugEvent.dwThreadId, DBG_CONTINUE);
