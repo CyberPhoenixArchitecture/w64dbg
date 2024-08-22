@@ -1,7 +1,9 @@
 #include <stdio.h>
-#include <string.h>
 
 int main(void)
 {
-    sscanf("12345", "%i", (int *) 1);
+    int i = 10;
+    int j = 0;
+    //Division by zero
+    printf("%u\n", i / j);
 }
