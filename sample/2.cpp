@@ -2,6 +2,7 @@
 
 static inline void Exception(int i, double j, const char * str)
 {
+    //Cause access violation
     sscanf("12345", "%d", (int *) 1);
 }
 
