@@ -17,16 +17,21 @@ After download build binaries, you should run **setup.bat** to ensure working en
 ## Usage
 
     
-    Usage: debug [/D] [/G] [/Q] [/S] executable [...]
+    Usage: debug [...] executable [...]
     
     Description:
     This tool is used to debug an executable on 64-bit Windows OS.
     
     Parameter List:
-    /D Load debug symbols.
-    /G Load debug symbols in DWARF format.
-    /Q Do not display verbose information.
+    /B Do not ignore breakpoints.
+    /D Load executable debug symbols.
+    /G Load executable debug symbols in DWARF format.
+    /Q Do not display verbose exception information.
+    /O Display OutputDebugString string.
     /S Start executable with a new console.
+    /T Specify to wait for the specified time period (in seconds)
+                                     or until any key is pressed.
+    /V Display verbose debug information.
     
 
 ## Sample
@@ -35,12 +40,19 @@ After download build binaries, you should run **setup.bat** to ensure working en
 
 ![SAMPLE](sample/2.png)
 
+![SAMPLE](sample/3.png)
+
+![SAMPLE](sample/4.png)
+
+![SAMPLE](sample/5.png)
+
 ## DLL Dependency
 
 |                  DLL                  |      Location       |               Package                |
 | ------------------------------------- | ------------------- | ------------------------------------ |
 | dbghelp.dll                           | C:\Windows\System32 | Debugging Tools For Windows          |
 | KERNEL32.dll                          | C:\Windows\System32 | Microsoft Visual C++ Redistributable |
+| ucrtbase.dll                          | C:\Windows\System32 | Universal C Runtime                  |
 | api-ms-win-crt-convert-l1-1-0.dll     | C:\Windows\System32 | Microsoft Visual C++ Redistributable |
 | api-ms-win-crt-environment-l1-1-0.dll | C:\Windows\System32 | Microsoft Visual C++ Redistributable |
 | api-ms-win-crt-heap-l1-1-0.dll        | C:\Windows\System32 | Microsoft Visual C++ Redistributable |
@@ -56,6 +68,10 @@ After download build binaries, you should run **setup.bat** to ensure working en
 Minium supported OS: Windows Vista
 
 Processor architecture: x64
+
+## Limitations
+
+w64dbg cannot handles more than **MAX_THREAD** and **MAX_DLL** (which is 256 and 64) as it is abnormal for a process to overcome these limits. If you want to adjust them, just change the definition in source files and build them.
 
 ## Frequently Asked Questions
 
