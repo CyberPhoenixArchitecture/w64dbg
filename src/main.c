@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
                         "Parameter List:\n"
                         "/B Do not ignore breakpoints.\n"
                         "/D Load executable debug symbols.\n"
-                        "/G Load executable debug symbols in DWARF format.\n"
+                        "/G Load executable debug symbols using GDB backend.\n"
                         "/Q Do not display verbose exception information.\n"
                         "/O Display OutputDebugString string.\n"
                         "/S Start executable with a new console.\n"
@@ -324,6 +324,7 @@ int main(int argc, char *argv[])
                 }
                 char *name;
                 BOOL bWow64;
+                BOOL Console;
                 CONTEXT Context;
                 DWORD MachineType;
                 DWORD Displacement;
@@ -368,12 +369,35 @@ int main(int argc, char *argv[])
                 p = FormatDebugException(&DebugEvent, p, _buffer, bWow64);
                 *p = '\n';
                 ++p;
+                Console = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_CHAR;
                 if (vexception)
                 {
+                    if (Console)
+                    {
+                        *p = '\x1b';
+                        ++p;
+                        *p = '[';
+                        ++p;
+                        *p = '3';
+                        ++p;
+                        *p = '1';
+                        ++p;
+                        *p = 'm';
+                        ++p;
+                    }
                     p = FormatVerboseDebugException(p, 
                         DebugEvent.u.Exception.ExceptionRecord.ExceptionCode);
                     *p = '\n';
                     ++p;
+                    if (Console)
+                    {
+                        *p = '\x1b';
+                        ++p;
+                        *p = '[';
+                        ++p;
+                        *p = 'm';
+                        ++p;
+                    }
                 }
                 //memset(&StackFrame, 0, sizeof(StackFrame));
                 if (bWow64)
@@ -401,107 +425,273 @@ int main(int argc, char *argv[])
                 pSymbol->MaxNameLen = MAX_SYM_NAME;
                 pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
                 count = 0;
-                while (TRUE)
+                if (Console)
                 {
-                    StackWalk64(MachineType, processInfo.hProcess, hThread[i], &StackFrame,
-                        &Context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
-                    if (SymFromAddr(processInfo.hProcess,
-                        StackFrame.AddrPC.Offset, &Displacement64, pSymbol) == 0)
-                        break;
-                    *p = '#';
-                    ++p;
-                    if (count < 10) *p = '0' + count;
-                    else
+                    while (TRUE)
                     {
-                        *p = '0' + count / 10;
+                        if (!StackWalk64(MachineType, processInfo.hProcess, hThread[i], &StackFrame,
+                            &Context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+                            break;
+                        if (!SymFromAddr(processInfo.hProcess, StackFrame.AddrPC.Offset, &Displacement64, pSymbol))
+                            break;
+                        *p = '#';
                         ++p;
-                        *p = '0' + count % 10;
-                    }
-                    ++p;
-                    *p = ' ';
-                    ++p;
-                    *p = ' ';
-                    ++p;
-                    *p = '0';
-                    ++p;
-                    *p = 'x';
-                    ++p;
-                    if (MachineType == IMAGE_FILE_MACHINE_I386)
-                    {
-                        _ultoaddr((DWORD) StackFrame.AddrPC.Offset, p, _buffer);
-                        p += 8;
-                    }
-                    else
-                    {
-                        ulltoaddr(StackFrame.AddrPC.Offset, p, _buffer);
-                        p += 16;
-                    }
-                    *p = ' ';
-                    ++p;
-                    *p = 'i';
-                    ++p;
-                    *p = 'n';
-                    ++p;
-                    *p = ' ';
-                    ++p;
-                    temp = K32GetModuleFileNameExA(processInfo.hProcess,
-                        (HMODULE) SymGetModuleBase64(processInfo.hProcess,
-                            StackFrame.AddrPC.Offset),
-                        _buffer, sizeof(_buffer));
-                    name = (char *) memrchr(_buffer, '\\', temp) + 1;
-                    j = (char *) memrchr(name, '.', _buffer + temp - name) - name;
-                    memcpy(p, name, j);
-                    p += j;
-                    *p = '!';
-                    ++p;
-                    memcpy(p, pSymbol->Name, pSymbol->NameLen);
-                    p += pSymbol->NameLen;
-                    *p = ' ';
-                    ++p;
-                    *p = '(';
-                    ++p;
-                    *p = ')';
-                    ++p;
-                    *p = ' ';
-                    ++p;
-                    *p = 'f';
-                    ++p;
-                    *p = 'r';
-                    ++p;
-                    *p = 'o';
-                    ++p;
-                    *p = 'm';
-                    ++p;
-                    *p = ' ';
-                    ++p;
-                    memcpy(p, _buffer, temp);
-                    p += temp;
-                    if (debug == TRUE && SymGetLineFromAddr64(processInfo.hProcess,
-                        StackFrame.AddrPC.Offset, &Displacement, &Line))
-                    {
-                        *p = ' ';
-                        ++p;
-                        *p = 'a';
-                        ++p;
-                        *p = 't';
+                        if (count < 10) *p = '0' + count;
+                        else
+                        {
+                            *p = '0' + count / 10;
+                            ++p;
+                            *p = '0' + count % 10;
+                        }
                         ++p;
                         *p = ' ';
                         ++p;
-                        p = FormatFileLine(&Line, p);
+                        *p = ' ';
+                        ++p;
+                        *p = '\x1b';
+                        ++p;
+                        *p = '[';
+                        ++p;
+                        *p = '3';
+                        ++p;
+                        *p = '4';
+                        ++p;
+                        *p = 'm';
+                        ++p;
+                        *p = '0';
+                        ++p;
+                        *p = 'x';
+                        ++p;
+                        if (MachineType == IMAGE_FILE_MACHINE_I386)
+                        {
+                            _ultoaddr((DWORD) StackFrame.AddrPC.Offset, p, _buffer);
+                            p += 8;
+                        }
+                        else
+                        {
+                            ulltoaddr(StackFrame.AddrPC.Offset, p, _buffer);
+                            p += 16;
+                        }
+                        *p = '\x1b';
+                        ++p;
+                        *p = '[';
+                        ++p;
+                        *p = 'm';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        *p = 'i';
+                        ++p;
+                        *p = 'n';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        *p = '\x1b';
+                        ++p;
+                        *p = '[';
+                        ++p;
+                        *p = '3';
+                        ++p;
+                        *p = '3';
+                        ++p;
+                        *p = 'm';
+                        ++p;
+                        temp = GetModuleFileNameExA(processInfo.hProcess,
+                            (HMODULE) SymGetModuleBase64(processInfo.hProcess,
+                                StackFrame.AddrPC.Offset),
+                            _buffer, sizeof(_buffer));
+                        name = (char *) memrchr(_buffer, '\\', temp) + 1;
+                        j = (char *) memrchr(name, '.', _buffer + temp - name) - name;
+                        memcpy(p, name, j);
+                        p += j;
+                        *p = '!';
+                        ++p;
+                        memcpy(p, pSymbol->Name, pSymbol->NameLen);
+                        p += pSymbol->NameLen;
+                        *p = '\x1b';
+                        ++p;
+                        *p = '[';
+                        ++p;
+                        *p = 'm';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        *p = '(';
+                        ++p;
+                        *p = ')';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        if (debug == TRUE && SymGetLineFromAddr64(processInfo.hProcess,
+                            StackFrame.AddrPC.Offset, &Displacement, &Line))
+                        {
+                            *p = 'a';
+                            ++p;
+                            *p = 't';
+                            ++p;
+                            *p = ' ';
+                            ++p;
+                            *p = '\x1b';
+                            ++p;
+                            *p = '[';
+                            ++p;
+                            *p = '3';
+                            ++p;
+                            *p = '2';
+                            ++p;
+                            *p = 'm';
+                            ++p;
+                            p = FormatFileLine(&Line, p, Console, verbose);
+                            *p = '\x1b';
+                            ++p;
+                            *p = '[';
+                            ++p;
+                            *p = 'm';
+                            ++p;
+                        }
+                        else
+                        {
+                            *p = 'f';
+                            ++p;
+                            *p = 'r';
+                            ++p;
+                            *p = 'o';
+                            ++p;
+                            *p = 'm';
+                            ++p;
+                            *p = ' ';
+                            ++p;
+                            *p = '\x1b';
+                            ++p;
+                            *p = '[';
+                            ++p;
+                            *p = '3';
+                            ++p;
+                            *p = '2';
+                            ++p;
+                            *p = 'm';
+                            ++p;
+                            memcpy(p, _buffer, temp);
+                            p += temp;
+                            *p = '\x1b';
+                            ++p;
+                            *p = '[';
+                            ++p;
+                            *p = 'm';
+                            ++p;
+                            *p = '\n';
+                            ++p;
+                        }
+                        ++count;
                     }
-                    *p = '\n';
-                    ++p;
-                    ++count;
+                    SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+                }
+                else
+                {
+                    while (TRUE)
+                    {
+                        if (!StackWalk64(MachineType, processInfo.hProcess, hThread[i], &StackFrame,
+                            &Context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+                            break;
+                        if (SymFromAddr(processInfo.hProcess,
+                            StackFrame.AddrPC.Offset, &Displacement64, pSymbol) == 0)
+                            break;
+                        *p = '#';
+                        ++p;
+                        if (count < 10) *p = '0' + count;
+                        else
+                        {
+                            *p = '0' + count / 10;
+                            ++p;
+                            *p = '0' + count % 10;
+                        }
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        *p = '0';
+                        ++p;
+                        *p = 'x';
+                        ++p;
+                        if (MachineType == IMAGE_FILE_MACHINE_I386)
+                        {
+                            _ultoaddr((DWORD) StackFrame.AddrPC.Offset, p, _buffer);
+                            p += 8;
+                        }
+                        else
+                        {
+                            ulltoaddr(StackFrame.AddrPC.Offset, p, _buffer);
+                            p += 16;
+                        }
+                        *p = ' ';
+                        ++p;
+                        *p = 'i';
+                        ++p;
+                        *p = 'n';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        temp = GetModuleFileNameExA(processInfo.hProcess,
+                            (HMODULE) SymGetModuleBase64(processInfo.hProcess,
+                                StackFrame.AddrPC.Offset),
+                            _buffer, sizeof(_buffer));
+                        name = (char *) memrchr(_buffer, '\\', temp) + 1;
+                        j = (char *) memrchr(name, '.', _buffer + temp - name) - name;
+                        memcpy(p, name, j);
+                        p += j;
+                        *p = '!';
+                        ++p;
+                        memcpy(p, pSymbol->Name, pSymbol->NameLen);
+                        p += pSymbol->NameLen;
+                        *p = ' ';
+                        ++p;
+                        *p = '(';
+                        ++p;
+                        *p = ')';
+                        ++p;
+                        *p = ' ';
+                        ++p;
+                        if (debug == TRUE && SymGetLineFromAddr64(processInfo.hProcess,
+                            StackFrame.AddrPC.Offset, &Displacement, &Line))
+                        {
+                            *p = 'a';
+                            ++p;
+                            *p = 't';
+                            ++p;
+                            *p = ' ';
+                            ++p;
+                            p = FormatFileLine(&Line, p, Console, verbose);
+                        }
+                        else
+                        {
+                            *p = 'f';
+                            ++p;
+                            *p = 'r';
+                            ++p;
+                            *p = 'o';
+                            ++p;
+                            *p = 'm';
+                            ++p;
+                            *p = ' ';
+                            ++p;
+                            memcpy(p, _buffer, temp);
+                            p += temp;
+                            *p = '\n';
+                            ++p;
+                        }
+                        ++count;
+                    }
                 }
                 if (debug == GNU)
                 {
                     if (SearchPathA(NULL, "gdb.exe", NULL, sizeof(_buffer), _buffer, NULL))
                     {
                         BOOL isDebugged;
-                        int iter, line, k;
-                        DWORD dwRead, dwFRead;
+                        int iter, k;
+                        DWORD dwRead;
                         PROCESS_INFORMATION GDBInfo;
-                        char src[4096], *str, *next, *ptr, *_ptr;
+                        char *str, *next, *ptr, *_ptr;
                         HANDLE hStdoutReadPipe, hStdoutWritePipe;
                         SECURITY_ATTRIBUTES saAttr = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
                         SuspendThread(hThread[i]);
@@ -529,32 +719,298 @@ int main(int argc, char *argv[])
                         }
                         ResumeThread(hThread[i]);
                         iter = 0;
-                        while (TRUE)
+                        if (Console)
                         {
-                            if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
-                                &dwRead, NULL) == 0) || !dwRead) break;
-                            str = (char *) memchr(_buffer, '#', dwRead);
-                            if (str == NULL) continue;
                             while (TRUE)
                             {
-                                next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
-                                if (iter >= count)
+                                if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
+                                    &dwRead, NULL) == 0) || !dwRead) break;
+                                str = (char *) memchr(_buffer, '#', dwRead);
+                                if (str == NULL) continue;
+                                while (TRUE)
                                 {
-                                    temp = next - str;
-                                    memcpy(p, str, temp);
-                                    p += temp;
-                                    if ((ptr = strstr(str, ") at ") + 5) > (char *) 5)
+                                    next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
+                                    if (iter >= count)
                                     {
-                                        _ptr = (char *) memrchr(ptr, ':', next - ptr);
-                                        *_ptr = '\0';
-                                        *(next - 1) = '\0';
-                                        k = atoi(_ptr + 1);
-                                        p = FormatSourceCode(ptr, k, p);
+                                        temp = next - str;
+                                        memcpy(p, str, 4);
+                                        p += 4;
+                                        *p = '\x1b';
+                                        ++p;
+                                        *p = '[';
+                                        ++p;
+                                        *p = '3';
+                                        ++p;
+                                        *p = '4';
+                                        ++p;
+                                        *p = 'm';
+                                        ++p;
+                                        if (*(str + 4) != '0') k = -1;
+                                        else
+                                        {
+                                            k = 21;
+                                            memcpy(p, str + 4, 18);
+                                            p += 18;
+                                            *p = '\x1b';
+                                            ++p;
+                                            *p = '[';
+                                            ++p;
+                                            *p = 'm';
+                                            ++p;
+                                            *p = ' ';
+                                            ++p;
+                                            *p = 'i';
+                                            ++p;
+                                            *p = 'n';
+                                            ++p;
+                                            *p = ' ';
+                                            ++p;
+                                        }
+                                        *p = '\x1b';
+                                        ++p;
+                                        *p = '[';
+                                        ++p;
+                                        *p = '3';
+                                        ++p;
+                                        *p = '3';
+                                        ++p;
+                                        *p = 'm';
+                                        ++p;
+                                        i = (char *) memchr(str + 5 + k, '(', temp - 5 - k) - str - 5 - k;
+                                        memcpy(p, str + 5 + k, i);
+                                        p += i;
+                                        *p = '\x1b';
+                                        ++p;
+                                        *p = '[';
+                                        ++p;
+                                        *p = 'm';
+                                        ++p;
+                                        *p = '(';
+                                        ++p;
+                                        j = (char *) memchr(str + 5 + k + i + 1, ')', temp - 5 - k - i - 1) - str - 5 - k - i;
+                                        if (j > 1)
+                                        {
+                                            *p = '\x1b';
+                                            ++p;
+                                            *p = '[';
+                                            ++p;
+                                            *p = '3';
+                                            ++p;
+                                            *p = '6';
+                                            ++p;
+                                            *p = 'm';
+                                            ++p;
+                                            ptr = (char *) memchr(str + 5 + k + i + 1, '=', temp - 5 - k - i - 1);
+                                            memcpy(p, str + 5 + k + i + 1, ptr - str - 5 - k - i - 1);
+                                            p += ptr - str - 5 - k - i - 1;
+                                            *p = '\x1b';
+                                            ++p;
+                                            *p = '[';
+                                            ++p;
+                                            *p = 'm';
+                                            ++p;
+                                            *p = '=';
+                                            ++p;
+                                            ++ptr;
+                                            _ptr = (char *) memchr(ptr, ',', str + temp - ptr);
+                                            if (_ptr == NULL)
+                                            {
+                                                _ptr = (char *) memchr(ptr, ')', str + temp - ptr);
+                                                memcpy(p, ptr, _ptr - ptr);
+                                                p += _ptr - ptr;
+                                            } else
+                                            {
+                                                memcpy(p, ptr, _ptr - ptr);
+                                                p += _ptr - ptr;
+                                                ptr = _ptr + 2;
+                                                while (TRUE)
+                                                {
+                                                    *p = ',';
+                                                    ++p;
+                                                    *p = ' ';
+                                                    ++p;
+                                                    *p = '\x1b';
+                                                    ++p;
+                                                    *p = '[';
+                                                    ++p;
+                                                    *p = '3';
+                                                    ++p;
+                                                    *p = '6';
+                                                    ++p;
+                                                    *p = 'm';
+                                                    ++p;
+                                                    _ptr = (char *) memchr(ptr, '=', str + temp - ptr);
+                                                    memcpy(p, ptr, _ptr - ptr);
+                                                    p += _ptr - ptr;
+                                                    *p = '\x1b';
+                                                    ++p;
+                                                    *p = '[';
+                                                    ++p;
+                                                    *p = 'm';
+                                                    ++p;
+                                                    if ((ptr = (char *) memchr(ptr, ',', str + temp - ptr) + 2)
+                                                    == (char *) 2)
+                                                    {
+                                                        ptr = (char *) memchr(_ptr, ')', str + temp - ptr);
+                                                        memcpy(p, _ptr, ptr - _ptr);
+                                                        p += ptr - _ptr;
+                                                        break;
+                                                    }
+                                                    memcpy(p, _ptr, ptr - _ptr - 2);
+                                                    p += ptr - _ptr - 2;
+                                                }
+                                            }
+                                        }
+                                        *p = ')';
+                                        ++p;
+                                        if (*(str + 5 + k + i + 1 + j) == ' ')
+                                        {
+                                            *p = ' ';
+                                            ++p;
+                                            if (*(str + 5 + k + i + 1 + j + 1) == 'a')
+                                            {
+                                                *p = 'a';
+                                                ++p;
+                                                *p = 't';
+                                                ++p;
+                                                *p = ' ';
+                                                ++p;
+                                                *p = '\x1b';
+                                                ++p;
+                                                *p = '[';
+                                                ++p;
+                                                *p = '3';
+                                                ++p;
+                                                *p = '2';
+                                                ++p;
+                                                *p = 'm';
+                                                ++p;
+                                                ptr = str + 5 + k + i + 1 + j + 4;
+                                                _ptr = (char *) memrchr(ptr, ':', next - ptr);
+                                                memcpy(p, ptr, _ptr - ptr);
+                                                p += _ptr - ptr;
+                                                *p = '\x1b';
+                                                ++p;
+                                                *p = '[';
+                                                ++p;
+                                                *p = 'm';
+                                                ++p;
+                                                memcpy(p, _ptr, str + temp - _ptr);
+                                                p += str + temp - _ptr;
+                                                *_ptr = '\0';
+                                                hStdoutWritePipe = CreateFileA(ptr,
+                                                    GENERIC_READ,
+                                                    0,
+                                                    NULL,
+                                                    OPEN_EXISTING,
+                                                    FILE_ATTRIBUTE_NORMAL,
+                                                    NULL);
+                                                if (hStdoutWritePipe != INVALID_HANDLE_VALUE)
+                                                {
+                                                    *(next - 1) = '\0';
+                                                    k = atoi(_ptr + 1);
+                                                    line = 1;
+                                                    while (TRUE)
+                                                    {
+                                                        if ((ReadFile(hStdoutWritePipe, src, sizeof(src),
+                                                            &dwFRead, NULL) == 0) || !dwFRead) break;
+                                                        _ptr = src;
+                                                        while ((_ptr = (char *) memchr(_ptr, '\n', src + dwFRead - _ptr) + 1) > (char *) 1)
+                                                        {
+                                                            ++line;
+                                                            if (line == k)
+                                                            {
+                                                                j = line;
+                                                                p = space_ultoa(j, p);
+                                                                temp = (char *) memchr(_ptr, '\n', src + dwFRead - _ptr) + 1 - _ptr;
+                                                                memcpy(p, _ptr, temp);
+                                                                p += temp;
+                                                                break;
+                                                            }
+                                                        }
+                                                        if (line == k) break;
+                                                    }
+                                                    CloseHandle(hStdoutWritePipe);
+                                                } else if (verbose)
+                                                {
+                                                    temp = _ptr - ptr;
+                                                    memcpy(p, ptr, temp);
+                                                    p += temp;
+                                                    memcpy(p, ": No such file or directory.\n", 29);
+                                                    p += 29;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                *p = 'f';
+                                                ++p;
+                                                *p = 'r';
+                                                ++p;
+                                                *p = 'o';
+                                                ++p;
+                                                *p = 'm';
+                                                ++p;
+                                                *p = ' ';
+                                                ++p;
+                                                *p = '\x1b';
+                                                ++p;
+                                                *p = '[';
+                                                ++p;
+                                                *p = '3';
+                                                ++p;
+                                                *p = '2';
+                                                ++p;
+                                                *p = 'm';
+                                                ++p;
+                                                memcpy(p, str + 5 + k + i + 1 + j + 6, next - (str + 5 + k + i + 1 + j + 6));
+                                                p += next - (str + 5 + k + i + 1 + j + 6);
+                                                *p = '\x1b';
+                                                ++p;
+                                                *p = '[';
+                                                ++p;
+                                                *p = 'm';
+                                                ++p;
+                                            }
+                                        } else
+                                        {
+                                            *p = '\n';
+                                            ++p;
+                                        }
                                     }
+                                    ++iter;
+                                    if (*next != '#') break;
+                                    str = next;
                                 }
-                                ++iter;
-                                if (*next != '#') break;
-                                str = next;
+                            }
+                        } else
+                        {
+                            while (TRUE)
+                            {
+                                if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
+                                    &dwRead, NULL) == 0) || !dwRead) break;
+                                str = (char *) memchr(_buffer, '#', dwRead);
+                                if (str == NULL) continue;
+                                while (TRUE)
+                                {
+                                    next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
+                                    if (iter >= count)
+                                    {
+                                        temp = next - str;
+                                        memcpy(p, str, temp);
+                                        p += temp;
+                                        if ((ptr = strstr(str, ") at ") + 5) > (char *) 5)
+                                        {
+                                            _ptr = (char *) memrchr(ptr, ':', next - ptr);
+                                            *_ptr = '\0';
+                                            *(next - 1) = '\0';
+                                            k = atoi(_ptr + 1);
+                                            p = FormatSourceCode(ptr, k, p, verbose);
+                                        }
+                                    }
+                                    ++iter;
+                                    if (*next != '#') break;
+                                    str = next;
+                                }
                             }
                         }
                     }
