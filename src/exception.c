@@ -282,14 +282,14 @@ static inline char *FormatDebugException(DEBUG_EVENT *DebugEvent, char *buffer, 
     p; \
 })
 
-static inline char *FormatSourceCode(char *fname, int line, char *p)
+static inline char *FormatSourceCode(char *fname, int line, char *p, BOOL verbose)
 {
     int temp;
     char buffer[4096];
     FILE *fp;
     temp = 0;
     fp = fopen(fname, "r");
-    if (fp == NULL)
+    if (fp == NULL && verbose)
     {
         p += sprintf(p, "%s: No such file or directory.\n", fname);
         return p;
@@ -307,17 +307,26 @@ static inline char *FormatSourceCode(char *fname, int line, char *p)
     return p;
 }
 
-static inline char *FormatFileLine(IMAGEHLP_LINE64 *lpLine, char *p)
+static inline char *FormatFileLine(IMAGEHLP_LINE64 *lpLine, char *p, BOOL Console, BOOL verbose)
 {
     int temp;
     temp = strlen(lpLine->FileName);
     memcpy(p, lpLine->FileName, temp);
     p += temp;
+    if (Console)
+    {
+        *p = '\x1b';
+        ++p;
+        *p = '[';
+        ++p;
+        *p = 'm';
+        ++p;
+    }
     *p = ':';
     ++p;
     _ultoa(lpLine->LineNumber, p, 10);
     p += strlen(p);
     *p = '\n';
     ++p;
-    return FormatSourceCode(lpLine->FileName, lpLine->LineNumber, p);
+    return FormatSourceCode(lpLine->FileName, lpLine->LineNumber, p, verbose);
 }
