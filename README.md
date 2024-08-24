@@ -36,15 +36,17 @@ After download build binaries, you should run **setup.bat** to ensure working en
 
 ## Sample
 
-![SAMPLE](sample/1.png)
+![SAMPLE](https://raw.githubusercontent.com/CyberPhoenixArchitecture/w64dbg/main/sample/1.png)
 
-![SAMPLE](sample/2.png)
+![SAMPLE](https://raw.githubusercontent.com/CyberPhoenixArchitecture/w64dbg/main/sample/2.png)
 
-![SAMPLE](sample/3.png)
+![SAMPLE](https://raw.githubusercontent.com/CyberPhoenixArchitecture/w64dbg/main/sample/3.png)
 
-![SAMPLE](sample/4.png)
+![SAMPLE](https://raw.githubusercontent.com/CyberPhoenixArchitecture/w64dbg/main/sample/4.png)
 
-![SAMPLE](sample/5.png)
+![SAMPLE](https://raw.githubusercontent.com/CyberPhoenixArchitecture/w64dbg/main/sample/5.png)
+
+![SAMPLE](https://raw.githubusercontent.com/CyberPhoenixArchitecture/w64dbg/main/sample/6.png)
 
 ## DLL Dependency
 
