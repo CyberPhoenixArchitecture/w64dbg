@@ -33,7 +33,7 @@ QUICKREF
 #include <limits.h>
 
 /* Nonzero if X is not aligned on a "long" boundary.  */
-#define unaligned(X) ((long)(X + 1) & (sizeof (long) - 1))
+#define unaligned(X) ((unsigned long long)(X + 1) & (sizeof (long) - 1))
 
 /* How many bytes are loaded each iteration of the word copy loop.  */
 #define LBLOCKSIZE (sizeof (long))
