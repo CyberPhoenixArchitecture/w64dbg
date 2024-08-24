@@ -898,47 +898,9 @@ int main(int argc, char *argv[])
                                                 memcpy(p, _ptr, str + temp - _ptr);
                                                 p += str + temp - _ptr;
                                                 *_ptr = '\0';
-                                                hStdoutWritePipe = CreateFileA(ptr,
-                                                    GENERIC_READ,
-                                                    0,
-                                                    NULL,
-                                                    OPEN_EXISTING,
-                                                    FILE_ATTRIBUTE_NORMAL,
-                                                    NULL);
-                                                if (hStdoutWritePipe != INVALID_HANDLE_VALUE)
-                                                {
-                                                    *(next - 1) = '\0';
-                                                    k = atoi(_ptr + 1);
-                                                    line = 1;
-                                                    while (TRUE)
-                                                    {
-                                                        if ((ReadFile(hStdoutWritePipe, src, sizeof(src),
-                                                            &dwFRead, NULL) == 0) || !dwFRead) break;
-                                                        _ptr = src;
-                                                        while ((_ptr = (char *) memchr(_ptr, '\n', src + dwFRead - _ptr) + 1) > (char *) 1)
-                                                        {
-                                                            ++line;
-                                                            if (line == k)
-                                                            {
-                                                                j = line;
-                                                                p = space_ultoa(j, p);
-                                                                temp = (char *) memchr(_ptr, '\n', src + dwFRead - _ptr) + 1 - _ptr;
-                                                                memcpy(p, _ptr, temp);
-                                                                p += temp;
-                                                                break;
-                                                            }
-                                                        }
-                                                        if (line == k) break;
-                                                    }
-                                                    CloseHandle(hStdoutWritePipe);
-                                                } else if (verbose)
-                                                {
-                                                    temp = _ptr - ptr;
-                                                    memcpy(p, ptr, temp);
-                                                    p += temp;
-                                                    memcpy(p, ": No such file or directory.\n", 29);
-                                                    p += 29;
-                                                }
+                                                *(next - 1) = '\0';
+                                                k = atoi(_ptr + 1);
+                                                p = FormatSourceCode(ptr, k, p, verbose);
                                             }
                                             else
                                             {
