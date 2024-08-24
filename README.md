@@ -25,7 +25,7 @@ After download build binaries, you should run **setup.bat** to ensure working en
     Parameter List:
     /B Do not ignore breakpoints.
     /D Load executable debug symbols.
-    /G Load executable debug symbols in DWARF format.
+    /G Load executable debug symbols using GDB backend.
     /Q Do not display verbose exception information.
     /O Display OutputDebugString string.
     /S Start executable with a new console.
@@ -71,7 +71,7 @@ Processor architecture: x64
 
 ## Limitations
 
-w64dbg cannot handles more than **MAX_THREAD** and **MAX_DLL** (which is 256 and 64) as it is abnormal for a process to overcome these limits. If you want to adjust them, just change the definition in source files and build them.
+w64dbg cannot handles more than **MAX_THREAD** and **MAX_DLL** (which is 256 and 64) as it is abnormal for a process to overcome these limits. If you want to adjust them, just change the definition in source files and build them. By the way, w64dbg will not print out more than 100 thread context frames as the only way to reach that unbelievable number is infinite recursive.
 
 ## Frequently Asked Questions
 
