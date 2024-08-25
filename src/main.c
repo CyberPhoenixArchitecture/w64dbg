@@ -23,79 +23,68 @@
 
 #define GCXX_RUNTIME_EXCEPTION 541541187
 
+VOID WINAPI CompletedWriteRoutine(DWORD dwErr, DWORD cbWritten, 
+   LPOVERLAPPED lpOverLap)
+{
+
+}
+
 int main(int argc, char *argv[])
 {
+    HANDLE hStderr;
     char buffer[65536];
-    int temp, i, breakpoint = FALSE, firstbreak = FALSE, debug = FALSE,
-    output = FALSE, timeout = 0, vexception = TRUE, verbose = FALSE, start = FALSE;
+    OVERLAPPED Overlapped = {};
+    int temp, i, timeout = 0, debug = FALSE;
+    BOOL breakpoint = FALSE, firstbreak = FALSE,
+    output = FALSE,vexception = TRUE, verbose = FALSE, start = FALSE;
+    Overlapped.Pointer = NULL;
+    hStderr = GetStdHandle(STD_ERROR_HANDLE);
     for (i = 1; i < argc; ++i)
-        if (argv[i][0] == '/') switch(argv[i][1])
+        if (argv[i][0] == '/')
         {
-            case 'B':
-                if (argv[i][2] == '\0')
-                {
+            if (argv[i][2] == '\0') switch(argv[i][1])
+            {
+                case 'B':
                     breakpoint = TRUE;
-                    break;
-                }
-            case 'D':
-                if (argv[i][2] == '\0')
-                {
+                    continue;
+                case 'D':
                     debug = TRUE;
-                    break;
-                }
-            case 'G':
-                if (argv[i][2] == '\0')
-                {
+                    continue;
+                case 'G':
                     debug = GNU;
-                    break;
-                }
-            case 'Q':
-                if (argv[i][2] == '\0')
-                {
+                    continue;
+                case 'Q':
                     vexception = FALSE;
-                    break;
-                }
-            case 'O':
-                if (argv[i][2] == '\0')
-                {
-                    output = TRUE;
-                    break;
-                }
-            case 'S':
-                if (argv[i][2] == '\0')
-                {
+                    continue;
+                case 'O':
+                    output = FALSE;
+                    continue;
+                case 'S':
                     start = TRUE;
-                    break;
-                }
-            case 'T':
-                if (argv[i][2] == '\0')
-                {
+                    continue;
+                case 'T':
                     if (++i >= argc)
                     {
-                        printf("ERROR: Invalid syntax. Value expected for '/T'\n"
-                            "Type \"debug /?\" for usage.\n");
-                        exit(1);
-                    } else if ((argv[i][0] == '-' && !isdigit(argv[i][1])) ||
-                        (argv[i][0] != '-' && !isdigit(argv[i][0])) ||
-                        (timeout = atoi(argv[i])) > 99999 ||
-                        timeout < -1)
+                        WriteFileEx(hStderr,
+                            "ERROR: Invalid syntax. Value expected for '/T'\n"
+                            "Type \"debug /?\" for usage.\n",
+                            74, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                        return 1;
+                    } else if ((timeout = atol(argv[i])) > 99999)
                     {
-                        printf("ERROR: Invalid value for timeout (/T) specified. Valid range is -1 to 99999.\n");
-                        exit(1);
+                        WriteFileEx(hStderr,
+                            "ERROR: Invalid value for timeout (/T) specified. Valid range is -1 to 99999.\n",
+                            76, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                        return 1;
                     }
-                    timeout = atoi(argv[i]);
                     break;
-                }
-            case 'V':
-                if (argv[i][2] == '\0')
-                {
+                case 'V':
                     verbose = TRUE;
-                    break;
-                }
-            case '?':
-                if (argv[i][2] == '\0')
-                {
-                    printf(
+                    continue;
+                case '?':
+                    WriteFileEx(hStderr,
                         "Usage: debug [...] executable [...]\n\n"
                         "Description:\n"
                         "This tool is used to debug an executable on 64-bit Windows OS.\n\n"
@@ -108,34 +97,57 @@ int main(int argc, char *argv[])
                         "/S Start executable with a new console.\n"
                         "/T Specify to wait for the specified time period (in seconds)\n"
                         "                                 or until any key is pressed.\n"
-                        "/V Display verbose debug information. \n");
-                    exit(0);
-                }
-            default:
-                printf("ERROR: Invalid argument/option - '%s'\n"
-                    "Type \"debug /?\" for usage.\n", argv[i]);
-                exit(1);
+                        "/V Display verbose debug information. \n"
+                        , 535, &Overlapped,
+                        (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                    return 0;
+            }
+            memcpy(buffer, "ERROR: Invalid argument/option - '", 34);
+            if (argv[i][2] == '\0')
+            {
+                temp = 2;
+                buffer[34] = '/';
+                buffer[35] = argv[i][1];
+            }
+            else
+            {
+                temp = strlen(argv[i]);
+                memcpy(buffer + 34, argv[i], temp);
+            }
+            memcpy(buffer + 34 + temp, "'.\n"
+                "Type \"debug /?\" for usage.\n", 30);
+            WriteFileEx(hStderr, buffer, 34 + temp + 30, &Overlapped,
+            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+            return 1;
         }
         else break;
     if (argc < 2 || i == argc)
     {
-        printf(
+        WriteFileEx(hStderr,
             "ERROR: Invalid syntax.\n"
-            "Type \"debug /?\" for usage.\n");
-        exit(1);
+            "Type \"debug /?\" for usage.\n"
+            , 50, &Overlapped,
+            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+        return 1;
     }
-    int j, count;
+    DWORD j, count;
     char _buffer[4096];
     j = SearchPathA(NULL, argv[i], ".exe", sizeof(_buffer), _buffer, NULL);
     if (j == 0)
     {
-        printf("ERROR: No such file or directory.\n");
-        exit(1);
+        WriteFileEx(hStderr,
+            "ERROR: No such file or directory.\n"
+            , 34, &Overlapped,
+            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+        return 1;
     }
-    if (GetBinaryTypeA(_buffer, (LPDWORD) &count) == 0)
+    if (GetBinaryTypeA(_buffer, &count) == 0)
     {
-        printf("ERROR: Exec format error.\n");
-        exit(1);
+        WriteFileEx(hStderr,
+            "ERROR: Exec format error.\n"
+            , 26, &Overlapped,
+            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+        return 1;
     }
     memcpy(buffer, _buffer, j);
     ++i;
@@ -190,15 +202,18 @@ int main(int argc, char *argv[])
         switch (DebugEvent.dwDebugEventCode)
         {
             case LOAD_DLL_DEBUG_EVENT:
-                if (verbose)
-                {
-                    GetFinalPathNameByHandleA(DebugEvent.u.LoadDll.hFile,
-                        buffer, sizeof(buffer), FILE_NAME_OPENED);
-                    printf("LoadDll %s\n", buffer);
-                }
                 //Find storage position
                 for (i = 1; i < MAX_DLL; ++i) if (!DLLInit[i])
                 {
+                    if (verbose)
+                    {
+                        memcpy(buffer, "LoadDll ", 8);
+                        temp = GetFinalPathNameByHandleA(DebugEvent.u.LoadDll.hFile,
+                            buffer + 8, sizeof(buffer), FILE_NAME_OPENED);
+                        buffer[temp + 8] = '\n';
+                        WriteFileEx(hStderr, buffer, temp + 9, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                    }
                     DLLInit[i] = 1;
                     hFile[i] = DebugEvent.u.LoadDll.hFile;
                     lpBaseOfDll[i] = DebugEvent.u.LoadDll.lpBaseOfDll;
@@ -212,9 +227,12 @@ int main(int argc, char *argv[])
                 {
                     if (verbose)
                     {
-                        GetFinalPathNameByHandleA(hFile[i],
-                            buffer, sizeof(buffer), FILE_NAME_OPENED);
-                        printf("UnloadDll %s\n", buffer);
+                        memcpy(buffer, "UnloadDll ", 10);
+                        temp = GetFinalPathNameByHandleA(hFile[i],
+                            buffer + 10, sizeof(buffer), FILE_NAME_OPENED);
+                        buffer[temp + 10] = '\n';
+                        WriteFileEx(hStderr, buffer, temp + 11, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                     }
                     CloseHandle(hFile[i]);
                     if (DLLInit[i] == 2) SymUnloadModule64(processInfo.hProcess,
@@ -224,31 +242,43 @@ int main(int argc, char *argv[])
                 }
                 break;
             case CREATE_THREAD_DEBUG_EVENT:
-                if (verbose)
-                {
-                    printf("CreateThread %ux%u\n",
-                        DebugEvent.dwProcessId,
-                        DebugEvent.dwThreadId);
-                }
                 //Find storage position
                 for (i = 0; i < MAX_THREAD; ++i) if (!dwThreadId[i])
                 {
+                    if (verbose)
+                    {
+                        memcpy(buffer, "CreateThread ", 13);
+                        _ultoa(DebugEvent.dwProcessId, buffer + 13, 10);
+                        temp = strlen(buffer + 13);
+                        buffer[13 + temp] = 'x';
+                        _ultoa(DebugEvent.dwThreadId, buffer + 14 + temp, 10);
+                        temp += strlen(buffer + 14 + temp);
+                        buffer[14 + temp] = '\n';
+                        WriteFileEx(hStderr, buffer, 14 + temp, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                    }
                     hThread[i] = DebugEvent.u.CreateThread.hThread;
                     dwThreadId[i] = DebugEvent.dwThreadId;
                     break;
                 }
                 break;
             case EXIT_THREAD_DEBUG_EVENT:
-                if (verbose)
-                {
-                    printf("ExitThread %ux%u\n",
-                        DebugEvent.dwProcessId,
-                        DebugEvent.dwThreadId);
-                }
                 //Find specific thread
                 for (i = 0; i < MAX_THREAD; ++i) if (DebugEvent.dwThreadId == dwThreadId[i])
                 {
                     CloseHandle(hThread[i]);
+                    if (verbose)
+                    {
+                        memcpy(buffer, "ExitThread ", 11);
+                        _ultoa(DebugEvent.dwProcessId, buffer + 11, 10);
+                        temp = strlen(buffer + 11);
+                        buffer[11 + temp] = 'x';
+                        _ultoa(DebugEvent.dwThreadId, buffer + 12 + temp, 10);
+                        temp += strlen(buffer + 12 + temp);
+                        buffer[12 + temp] = '\n';
+                        WriteFileEx(hStderr, buffer, 12 + temp, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                    }
                     dwThreadId[i] = 0;
                     break;
                 }
@@ -256,9 +286,15 @@ int main(int argc, char *argv[])
             case EXIT_PROCESS_DEBUG_EVENT:
                 if (verbose)
                 {
-                    printf("ExitProcess %ux%u\n",
-                        DebugEvent.dwProcessId,
-                        DebugEvent.dwThreadId);
+                    memcpy(buffer, "ExitProcess ", 12);
+                    _ultoa(DebugEvent.dwProcessId, buffer + 12, 10);
+                    temp = strlen(buffer + 12);
+                    buffer[12 + temp] = 'x';
+                    _ultoa(DebugEvent.dwThreadId, buffer + 13 + temp, 10);
+                    temp += strlen(buffer + 13 + temp);
+                    buffer[13 + temp] = '\n';
+                    WriteFileEx(hStderr, buffer, 13 + temp, &Overlapped,
+                        (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                 }
                 for (i = 1; i < MAX_DLL; ++i) if (DLLInit[i] != 0)
                 {
@@ -285,7 +321,8 @@ int main(int argc, char *argv[])
                 }
                 if (timeout)
                 {
-                    sprintf(buffer, "timeout %d", timeout);
+                    memcpy(buffer, "timeout ", 8);
+                    itoa(timeout, buffer, 10);
                     system(buffer);
                 }
                 exit(0);
@@ -297,7 +334,9 @@ int main(int argc, char *argv[])
                         DebugEvent.u.DebugString.lpDebugStringData,
                         buffer, DebugEvent.u.DebugString.nDebugStringLength,
                         &NumberOfBytesRead);
-                    printf(buffer);
+                    WriteFileEx(hStderr,
+                        buffer, NumberOfBytesRead, &Overlapped,
+                        (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                 }
                 break;
             case EXCEPTION_DEBUG_EVENT:
@@ -364,7 +403,11 @@ int main(int argc, char *argv[])
                         0);
                     DLLInit[j] = 2;
                 }
-                p = buffer + sprintf(buffer, "Thread #%02u caused ", temp + 1);
+                memcpy(buffer, "Thread #", 8);
+                _ultoa(i + 1, buffer + 8, 10);
+                p = buffer + 8 + strlen(buffer + 8);
+                memcpy(p, " caused ", 8);
+                p += 8;
                 IsWow64Process(processInfo.hProcess, &bWow64);
                 p = FormatDebugException(&DebugEvent, p, _buffer, bWow64);
                 *p = '\n';
@@ -994,7 +1037,9 @@ int main(int argc, char *argv[])
                     DebugEvent.dwThreadId,
                     DBG_EXCEPTION_NOT_HANDLED);
                 *p = '\0';
-                printf(buffer);
+                WriteFileEx(hStderr,
+                    buffer, p - buffer, &Overlapped,
+                    (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                 if (debug == GNU) exit(0);
                 continue;
         }
