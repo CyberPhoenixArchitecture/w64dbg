@@ -699,8 +699,19 @@ int main(int argc, char *argv[])
                             DebugEvent.dwThreadId,
                             DBG_EXCEPTION_NOT_HANDLED);
                         DebugActiveProcessStop(DebugEvent.dwProcessId);
-                        memcpy(p, "gdb.exe -q -batch -x=gdbinit -ex=cont -ex=bt -p ", 48);
-                        _ultoa(DebugEvent.dwProcessId, p + 48, 10);
+                        memcpy(p, "gdb.exe -q -batch -x=", 21);
+                        temp = GetTempPathA(4096, p + 21);
+                        memcpy(p + 21 + temp, "gdbinit", 7);
+                        if (GetFileAttributesA(p + 21) == INVALID_FILE_ATTRIBUTES)
+                        {
+                            HANDLE hFile = CreateFileA(p + 21, GENERIC_WRITE, 0, NULL,
+                                CREATE_ALWAYS, FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_WRITE_THROUGH,
+                                NULL);
+                            WriteFileEx(hFile, "set print thread-events off\nset pagination off\nset style enabled on\nset backtrace limit 100", 91, &Overlapped, NULL);
+                            CloseHandle(hFile);
+                        }
+                        memcpy(p + 21 + temp + 7, " -ex=cont -ex=bt -p ", 20);
+                        _ultoa(DebugEvent.dwProcessId, p + 21 + temp + 7 + 20, 10);
                         CreatePipe(&hStdoutReadPipe, &hStdoutWritePipe, &saAttr, 0);
                         startupInfo.hStdOutput = hStdoutWritePipe;
                         startupInfo.dwFlags = STARTF_USESTDHANDLES;
