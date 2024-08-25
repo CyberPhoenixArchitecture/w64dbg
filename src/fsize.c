@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-DWORD GetModuleSize(HANDLE hFile)
+static inline DWORD GetModuleSize(HANDLE hFile)
 {
     DWORD Size;
     HANDLE hMapping;
