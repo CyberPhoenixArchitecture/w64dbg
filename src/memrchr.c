@@ -60,7 +60,7 @@ QUICKREF
    to fill (long)MASK. */
 #define DETECTCHAR(X,MASK) (DETECTNULL(X ^ MASK))
 
-void *memrchr(const void *src_void, int c, size_t length)
+static inline void *memrchr(const void *src_void, int c, size_t length)
 {
     const unsigned char *src = (const unsigned char *) src_void + length - 1;
     while (unaligned(src))
