@@ -325,7 +325,7 @@ int main(int argc, char *argv[])
                     itoa(timeout, buffer, 10);
                     system(buffer);
                 }
-                exit(0);
+                return 0;
             case OUTPUT_DEBUG_STRING_EVENT:
                 if (output == TRUE)
                 {
@@ -341,8 +341,7 @@ int main(int argc, char *argv[])
                 break;
             case EXCEPTION_DEBUG_EVENT:
                 //ignore first-chance breakpoints && thread naming exception
-                //GCXX_RUNTIME_EXCEPTION
-                if (DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 541541187)
+                if (DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 541541187) //GCXX_RUNTIME_EXCEPTION
                     break;
                 if ((breakpoint == FALSE && (
                 DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x80000003 || //EXCEPTION_BREAKPOINT
@@ -350,7 +349,6 @@ int main(int argc, char *argv[])
                 DebugEvent.u.Exception.ExceptionRecord.ExceptionCode == 0x406D1388)) || //MS_VC_EXCEPTION
                 (breakpoint == TRUE && ++firstbreak == TRUE))
                     break;
-                //Terminate and exit
                 for (i = 0; i < MAX_THREAD; ++i) if (DebugEvent.dwThreadId == dwThreadId[i])
                     break;
                 if (DebugEvent.u.Exception.dwFirstChance == 0 ||
@@ -1040,7 +1038,7 @@ int main(int argc, char *argv[])
                 WriteFileEx(hStderr,
                     buffer, p - buffer, &Overlapped,
                     (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
-                if (debug == GNU) exit(0);
+                if (debug == GNU) return 0;
                 continue;
         }
         ContinueDebugEvent(DebugEvent.dwProcessId, DebugEvent.dwThreadId, DBG_CONTINUE);
