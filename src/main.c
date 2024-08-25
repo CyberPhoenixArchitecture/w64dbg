@@ -412,7 +412,7 @@ int main(int argc, char *argv[])
                 p = FormatDebugException(&DebugEvent, p, _buffer, bWow64);
                 *p = '\n';
                 ++p;
-                Console = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_CHAR;
+                Console = GetFileType(hStderr) == FILE_TYPE_CHAR;
                 if (vexception)
                 {
                     if (Console)
