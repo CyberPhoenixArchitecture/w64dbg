@@ -509,15 +509,18 @@ int main(int argc, char *argv[])
                             break;
                         *p = '#';
                         ++p;
-                        if (count < 10) *p = '0' + count;
+                        if (count < 10)
+                        {
+                            *p = '0' + count;
+                            ++p;
+                            *p = ' ';
+                        }
                         else
                         {
                             *p = '0' + count / 10;
                             ++p;
                             *p = '0' + count % 10;
                         }
-                        ++p;
-                        *p = ' ';
                         ++p;
                         *p = ' ';
                         ++p;
