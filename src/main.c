@@ -1,7 +1,6 @@
 #define ANSI
 #define _ANSI
 #undef UNICODE
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -11,6 +10,7 @@
 #include "exception.c"
 #include "fsize.c"
 #include "memrchr.c"
+#include "optimize.h"
 
 #define MAX_THREAD 256
 #define MAX_DLL 64
