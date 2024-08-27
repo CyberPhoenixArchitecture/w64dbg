@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
                             74, &Overlapped,
                             (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                         return 1;
-                    } else if ((timeout = atol(argv[i])) > 99999)
+                    } else if ((timeout = atol(argv[i])) > 99999 || timeout < -1)
                     {
                         WriteFileEx(hStderr,
                             "ERROR: Invalid value for timeout (/T) specified. Valid range is -1 to 99999.\n",
