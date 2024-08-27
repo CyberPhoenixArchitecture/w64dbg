@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
                             74, &Overlapped,
                             (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                         return 1;
-                    } else if ((timeout = atou(argv[i])) > 99999)
+                    } else if ((timeout = atol(argv[i])) > 99999)
                     {
                         WriteFileEx(hStderr,
                             "ERROR: Invalid value for timeout (/T) specified. Valid range is -1 to 99999.\n",
@@ -321,9 +321,41 @@ int main(int argc, char *argv[])
                 }
                 if (timeout)
                 {
-                    memcpy(buffer, "timeout ", 8);
-                    itoa(timeout, buffer, 10);
-                    system(buffer);
+                    /* ---------------- DECLARATION ---------------- */
+                    HANDLE hStdin;
+                    INPUT_RECORD InputRecord;
+                    /* --------------------------------------------- */
+                    WriteFileEx(hStderr,
+                        "\nPress any key to continue ...",
+                        30, &Overlapped,
+                        (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                    hStdin = GetStdHandle(STD_INPUT_HANDLE);
+                    if (timeout == -1)
+                        while (TRUE)
+                        {
+                            ReadConsoleInputA(hStdin, &InputRecord, 1, &count);
+                            if (InputRecord.EventType == KEY_EVENT &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
+                                break;
+                        }
+                    else
+                    {
+                        /* ---------------- DECLARATION ---------------- */
+                        DWORD ctime;
+                        /* --------------------------------------------- */
+                        ctime = GetTickCount() + (timeout << 10);
+                        while (TRUE)
+                        {
+                            if (WaitForSingleObjectEx(hStdin, ctime - GetTickCount(), FALSE) == WAIT_TIMEOUT)
+                                break;
+                            ReadConsoleInputA(hStdin, &InputRecord, 1, &count);
+                            if (InputRecord.EventType == KEY_EVENT &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
+                                break;
+                        }
+                    }
                 }
                 return 0;
             case OUTPUT_DEBUG_STRING_EVENT:
@@ -740,17 +772,17 @@ int main(int argc, char *argv[])
                             DebugEvent.dwThreadId,
                             DBG_EXCEPTION_NOT_HANDLED);
                         DebugActiveProcessStop(DebugEvent.dwProcessId);
-                        memcpy(p, "gdb.exe -q -batch -x=", 21);
-                        temp = GetTempPathA(4096, p + 21);
-                        memcpy(p + 21 + temp, "gdbinit", 7);
-                        if (GetFileAttributesA(p + 21) == INVALID_FILE_ATTRIBUTES)
+                        memcpy(p, "gdb.exe -q -x=", 14);
+                        temp = GetTempPathA(4096, p + 14);
+                        memcpy(p + 14 + temp, "gdbinit", 7);
+                        if (GetFileAttributesA(p + 14) == INVALID_FILE_ATTRIBUTES)
                         {
-                            FILE *fp = fopen(p + 21, "w");
+                            FILE *fp = fopen(p + 14, "w");
                             fwrite("set print thread-events off\nset pagination off\nset style enabled on\nset backtrace limit 100\ncont\nbt", 99, 1, fp);
                             fclose(fp);
                         }
-                        memcpy(p + 21 + temp + 7, " -p ", 4);
-                        _ultoa(DebugEvent.dwProcessId, p + 21 + temp + 7 + 4, 10);
+                        memcpy(p + 14 + temp + 7, " -p ", 4);
+                        _ultoa(DebugEvent.dwProcessId, p + 14 + temp + 7 + 4, 10);
                         CreatePipe(&hStdoutReadPipe, &hStdoutWritePipe, &saAttr, 0);
                         startupInfo.hStdOutput = hStdoutWritePipe;
                         startupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -759,7 +791,6 @@ int main(int argc, char *argv[])
                             NULL, NULL, &startupInfo, &GDBInfo);
                         CloseHandle(hStdoutWritePipe);
                         CloseHandle(GDBInfo.hThread);
-                        CloseHandle(GDBInfo.hProcess);
                         while (TRUE)
                         {
                             SleepEx(LATENCY, FALSE);
@@ -775,8 +806,12 @@ int main(int argc, char *argv[])
                             {
                                 if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
                                     &dwRead, NULL) == 0) || !dwRead) break;
-                                str = (char *) memchr(_buffer, '#', dwRead);
-                                if (str == NULL) continue;
+                                str = (char *) strstr(_buffer, "\n#") + 1;
+                                if (str == (char *) 1)
+                                {
+                                    if (memcmp(_buffer, "(gdb)", 5) == 0) break;
+                                    else continue;
+                                }
                                 while (TRUE)
                                 {
                                     next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
@@ -1001,7 +1036,11 @@ int main(int argc, char *argv[])
                                 if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
                                     &dwRead, NULL) == 0) || !dwRead) break;
                                 str = (char *) memchr(_buffer, '#', dwRead);
-                                if (str == NULL) continue;
+                                if (str == (char *) 1)
+                                {
+                                    if (memcmp(_buffer, "(gdb)", 5) == 0) break;
+                                    else continue;
+                                }
                                 while (TRUE)
                                 {
                                     next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
@@ -1025,20 +1064,73 @@ int main(int argc, char *argv[])
                                 }
                             }
                         }
+                        for (i = 1; i < MAX_DLL; ++i) if (DLLInit[i] != 0)
+                        {
+                            CloseHandle(hFile[i]); //May fail for first time
+                            if (DLLInit[i] == 2) SymUnloadModule64(processInfo.hProcess,
+                                (DWORD64) lpBaseOfDll[i]);
+                        }
+                        SymCleanup(processInfo.hProcess);
+                        CloseHandle(processInfo.hProcess);
+                        for (i = 0; i < MAX_THREAD; ++i) if (DebugEvent.dwThreadId == dwThreadId[i])
+                        {
+                            CloseHandle(hThread[i]);
+                            break;
+                        }
+                        if (timeout)
+                        {
+                            /* ---------------- DECLARATION ---------------- */
+                            HANDLE hStdin;
+                            INPUT_RECORD InputRecord;
+                            /* --------------------------------------------- */
+                            WriteFileEx(hStderr,
+                                "\nPress any key to continue ...",
+                                30, &Overlapped,
+                                (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+                            hStdin = GetStdHandle(STD_INPUT_HANDLE);
+                            if (timeout == -1)
+                                while (TRUE)
+                                {
+                                    ReadConsoleInputA(hStdin, &InputRecord, 1, &count);
+                                    if (InputRecord.EventType == KEY_EVENT &&
+                                        InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
+                                        InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
+                                        break;
+                                }
+                            else
+                            {
+                                /* ---------------- DECLARATION ---------------- */
+                                DWORD ctime;
+                                /* --------------------------------------------- */
+                                ctime = GetTickCount() + (timeout << 10);
+                                while (TRUE)
+                                {
+                                    if (WaitForSingleObjectEx(hStdin, ctime - GetTickCount(), FALSE) == WAIT_TIMEOUT)
+                                        break;
+                                    ReadConsoleInputA(hStdin, &InputRecord, 1, &count);
+                                    if (InputRecord.EventType == KEY_EVENT &&
+                                        InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
+                                        InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
+                                        break;
+                                }
+                            }
+                        }
+                        TerminateProcess(GDBInfo.hProcess, 0);
+                        CloseHandle(GDBInfo.hProcess);
+                        return 0;
                     }
                     else if (verbose)
                     {
                         memcpy(p, "gdb.exe: No such file or directory.\n", 36);
                         p += 36;
                     }
-                } else ContinueDebugEvent(DebugEvent.dwProcessId,
-                    DebugEvent.dwThreadId,
-                    DBG_EXCEPTION_NOT_HANDLED);
+                }
                 *p = '\0';
                 WriteFileEx(hStderr,
                     buffer, p - buffer, &Overlapped,
                     (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
-                if (debug == GNU) return 0;
+                ContinueDebugEvent(DebugEvent.dwProcessId,
+                    DebugEvent.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
                 continue;
         }
         ContinueDebugEvent(DebugEvent.dwProcessId, DebugEvent.dwThreadId, DBG_CONTINUE);
