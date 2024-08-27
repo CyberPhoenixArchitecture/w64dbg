@@ -17,7 +17,7 @@
 #define GNU 2
 #define LATENCY 99
 
-#define SymOptions (SYMOPT_DEFERRED_LOADS | SYMOPT_INCLUDE_32BIT_MODULES)
+#define SymOptions (SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_ANYTHING  | SYMOPT_INCLUDE_32BIT_MODULES)
 #define _DebugSymOptions (SymOptions | SYMOPT_LOAD_LINES)
 #define NDebugSymOptions (SymOptions | SYMOPT_NO_CPP)
 
@@ -1064,6 +1064,9 @@ int main(int argc, char *argv[])
                                 }
                             }
                         }
+                        WriteFileEx(hStderr,
+                            buffer, p - buffer, &Overlapped,
+                            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                         for (i = 1; i < MAX_DLL; ++i) if (DLLInit[i] != 0)
                         {
                             CloseHandle(hFile[i]); //May fail for first time
