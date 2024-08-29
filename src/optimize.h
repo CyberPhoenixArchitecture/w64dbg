@@ -19,7 +19,7 @@
     else __builtin_strcpy(_Dst, _Src); \
     _Dst; \
 })
-#else
+#elif defined(__cplusplus)
 #include <cstring>
 #include <type_traits>
 using namespace std;
