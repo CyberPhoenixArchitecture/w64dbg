@@ -1,9 +1,7 @@
-#include <string.h>
-
-#if defined(__OPTIMIZE__) && defined(__has_builtin)
+#ifdef __OPTIMIZE__
 #undef memcpy
 #undef strcpy
-#if __has_builtin(__builtin_constant_p)
+#if defined(__has_builtin)
 #define memcpy(_Dst, _Src, _Size) \
 ({ \
     if (__builtin_constant_p(_Src) || \
