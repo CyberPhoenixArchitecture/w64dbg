@@ -1,6 +1,10 @@
+#include <string.h>
+
 #ifdef __OPTIMIZE__
+
 #undef memcpy
 #undef strcpy
+
 #ifdef __GNUC__
 #define memcpy(_Dst, _Src, _Size) \
 ({ \
@@ -20,7 +24,6 @@
     _Dst; \
 })
 #elif defined(__cplusplus)
-#include <cstring>
 #include <type_traits>
 using namespace std;
 #define memcpy(_Dst, _Src, _Size) \
@@ -38,5 +41,4 @@ using namespace std;
     else strcpy(_Dst, _Src); \
     _Dst; \
 })
-#endif
 #endif
