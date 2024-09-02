@@ -781,7 +781,7 @@ int main(int argc, char *argv[])
                         if (GetFileAttributesA(p + 14) == INVALID_FILE_ATTRIBUTES)
                         {
                             FILE *fp = fopen(p + 14, "w");
-                            fwrite("set print thread-events off\nset pagination off\nset style enabled on\nset backtrace limit 100\ncont\nbt", 99, 1, fp);
+                            fwrite("set print thread-events off\nset pagination off\nset style enabled on\nset backtrace limit 100\nset print frame-arguments all\nset print entry-values no\nset print object on\nset print pretty off\nset width 0\ncont\nbt", 208, 1, fp);
                             fclose(fp);
                         }
                         memcpy(p + 14 + temp + 7, " -p ", 4);
