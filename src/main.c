@@ -809,8 +809,8 @@ int main(int argc, char *argv[])
                             {
                                 if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
                                     &dwRead, NULL) == 0) || !dwRead) break;
-                                str = (char *) strstr(_buffer, "\n#") + 1;
-                                if (str == (char *) 1)
+                                str = (char *) memchr(_buffer, '#', dwRead);
+                                if (str == NULL)
                                 {
                                     if (memcmp(_buffer, "(gdb)", 5) == 0) break;
                                     else continue;
@@ -820,7 +820,8 @@ int main(int argc, char *argv[])
                                     next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
                                     if (iter >= count)
                                     {
-                                        temp = next - str;
+                                        if (next > (char *) 1) temp = next - str;
+                                        else temp = _buffer + dwRead - str;
                                         memcpy(p, str, 4);
                                         p += 4;
                                         *p = '\x1b';
