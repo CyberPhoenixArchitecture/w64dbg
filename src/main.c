@@ -818,6 +818,7 @@ int main(int argc, char *argv[])
                                 while (TRUE)
                                 {
                                     next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
+                                    if (memcmp(str, "(gdb)", 5) == 0) break;    
                                     if (iter >= count)
                                     {
                                         if (next > (char *) 1) temp = next - str;
@@ -876,7 +877,7 @@ int main(int argc, char *argv[])
                                         ++p;
                                         *p = '(';
                                         ++p;
-                                        j = (char *) memchr(str + 5 + k + i + 1, ')', temp - 5 - k - i - 1) - str - 5 - k - i;
+                                        j = (char *) memrchr(str + 5 + k + i + 1, ')', temp - 5 - k - i - 1) - str - 5 - k - i;
                                         if (j > 1)
                                         {
                                             *p = '\x1b';
@@ -1048,6 +1049,7 @@ int main(int argc, char *argv[])
                                 while (TRUE)
                                 {
                                     next = (char *) memchr(str, '\n', _buffer + dwRead - str) + 1;
+                                    if (memcmp(str, "(gdb)", 5) == 0) break;    
                                     if (iter >= count)
                                     {
                                         temp = next - str;
