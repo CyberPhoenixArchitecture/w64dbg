@@ -6,7 +6,7 @@ w64dbg is a tool debugging live user-mode and kernel-mode code for 64-bit Window
 
 ## Download
 
-* [Releases](/releases)
+* [Releases](https://github.com/CyberPhoenixArchitecture/w64dbg/releases)
 
 * [Git repository](https://github.com/CyberPhoenixArchitecture/w64dbg)
 
