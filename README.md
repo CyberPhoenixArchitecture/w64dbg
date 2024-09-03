@@ -168,7 +168,7 @@ Processor architecture: x64
 
 ## Limitations
 
-w64dbg cannot handles more than **MAX_THREAD** and **MAX_DLL** (which is 256 and 64 defined [here](https://github.com/CyberPhoenixArchitecture/w64dbg/blob/main/src/main.c#L15)) as it is abnormal for a process to overcome these limits. If you want to adjust them, just change the definition in source files and build them. By the way, w64dbg will not print out more than 100 thread context frames as the only way to reach that unbelievable number is infinite recursive.
+w64dbg cannot handles more than **MAX_THREAD** and **MAX_DLL** (which is 256 and 64 defined [here](src/main.c#L15)) as it is abnormal for a process to overcome these limits. If you want to adjust them, just change the definition in source files and build them. By the way, w64dbg will not print out more than 100 thread context frames as the only way to reach that unbelievable number is infinite recursive.
 
 ## Frequently Asked Questions
 
