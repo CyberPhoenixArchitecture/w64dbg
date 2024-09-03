@@ -12,7 +12,7 @@ w64dbg is a tool debugging live user-mode and kernel-mode code for 64-bit Window
 
 ## Installation
 
-After download build binaries, you should run **setup.bat** to ensure working environment is fine.
+After download build binaries or build yourself, run **setup.bat** to ensure working environment is fine.
 
 ## Usage
 
