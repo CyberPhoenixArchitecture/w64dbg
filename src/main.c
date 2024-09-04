@@ -839,8 +839,20 @@ int main(int argc, char *argv[])
                                         else
                                         {
                                             k = 21;
-                                            memcpy(p, str + 4, 18);
-                                            p += 18;
+                                            *p = '0';
+                                            ++p;
+                                            *p = 'x';
+                                            ++p;
+                                            if (bWow64)
+                                            {
+                                                k -= 8;
+                                                memcpy(p, str + 6, 8);
+                                                p += 8;
+                                            } else
+                                            {
+                                                memcpy(p, str + 6, 16);
+                                                p += 16;
+                                            }
                                             *p = '\x1b';
                                             ++p;
                                             *p = '[';
