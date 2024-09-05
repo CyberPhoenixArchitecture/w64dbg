@@ -5,7 +5,9 @@
 #undef memcpy
 #undef strcpy
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
+#undef memcpy
+#undef strcpy
 #define memcpy(_Dst, _Src, _Size) \
 ({ \
     if (__builtin_constant_p(_Src) || \
@@ -26,6 +28,8 @@
 #elif defined(__cplusplus)
 #include <type_traits>
 using namespace std;
+#undef memcpy
+#undef strcpy
 #define memcpy(_Dst, _Src, _Size) \
 ({ \
     if (__is_constant_evaluated()) \
