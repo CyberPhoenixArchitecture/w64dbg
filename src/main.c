@@ -23,11 +23,23 @@
 
 #define GCXX_RUNTIME_EXCEPTION 541541187
 
-VOID WINAPI CompletedWriteRoutine(DWORD dwErr, DWORD cbWritten, 
-   LPOVERLAPPED lpOverLap)
-{
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((leaf, no_stack_protector, nothrow))
+#endif
+#endif
 
-}
+static VOID WINAPI CompletedWriteRoutine(DWORD dwErr, DWORD cbWritten, LPOVERLAPPED lpOverLap) {}
+
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((access(read_only, 2), no_stack_protector, nothrow))
+#else
+__attribute__((access(read_only, 2), flatten, no_stack_protector, nothrow))
+#endif
+#endif
 
 int main(int argc, char *argv[])
 {
