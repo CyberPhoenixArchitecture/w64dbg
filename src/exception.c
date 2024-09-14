@@ -6,6 +6,14 @@
 #include <dbghelp.h>
 #include "addr.c"
 
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
+
 static inline const char *GetExceptionMessage(DWORD ExceptionCode)
 {
     switch (ExceptionCode)
@@ -89,6 +97,14 @@ static inline const char *GetExceptionMessage(DWORD ExceptionCode)
             return "unknown exception";
     }
 }
+
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
 
 static inline char *FormatDebugException(DEBUG_EVENT *DebugEvent, char *buffer, char *p, BOOL bWow64)
 {
@@ -282,6 +298,14 @@ static inline char *FormatDebugException(DEBUG_EVENT *DebugEvent, char *buffer, 
     p; \
 })
 
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
+
 static inline char *FormatSourceCode(char *fname, int line, char *p, BOOL verbose)
 {
     int temp;
@@ -306,6 +330,14 @@ static inline char *FormatSourceCode(char *fname, int line, char *p, BOOL verbos
     fclose(fp);
     return p;
 }
+
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
 
 static inline char *FormatFileLine(IMAGEHLP_LINE64 *lpLine, char *p, BOOL Console, BOOL verbose)
 {
