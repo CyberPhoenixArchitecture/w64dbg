@@ -2,6 +2,14 @@
 #include <string.h>
 #include <stdlib.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
+
 static inline void _ultoaddr(unsigned long value, char *p, char *buffer)
 {
     int temp;
@@ -10,6 +18,15 @@ static inline void _ultoaddr(unsigned long value, char *p, char *buffer)
     temp = strlen(buffer);
     memcpy(p + 8 - temp, buffer, temp);
 }
+
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
+
 static inline void ulltoaddr(unsigned long long value, char *p, char *buffer)
 {
     int temp;
