@@ -1,6 +1,14 @@
 #pragma once
 #include <windows.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((no_stack_protector, nothrow))
+#else
+__attribute__((always_inline, flatten, no_stack_protector, nothrow))
+#endif
+#endif
+
 static inline DWORD GetModuleSize(HANDLE hFile)
 {
     DWORD Size;
