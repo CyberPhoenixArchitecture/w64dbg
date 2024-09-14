@@ -33,7 +33,11 @@ QUICKREF
 #include <limits.h>
 
 /* Nonzero if X is not aligned on a "long" boundary.  */
-#define unaligned(X) ((unsigned long long)(X + 1) & (sizeof (long) - 1))
+#ifdef __i386__
+#define unaligned(X) ((unsigned long)(X + 1) & (sizeof(long) - 1))
+#else
+#define unaligned(X) ((unsigned long long)(X + 1) & (sizeof(long) - 1))
+#endif
 
 /* How many bytes are loaded each iteration of the word copy loop.  */
 #define LBLOCKSIZE (sizeof (long))
@@ -62,7 +66,12 @@ QUICKREF
 
 static inline void *memrchr(const void *src_void, int c, size_t length)
 {
-    const unsigned char *src = (const unsigned char *) src_void + length - 1;
+#ifdef _MSC_VER
+    const unsigned char * __restrict src = (const unsigned char * __restrict)
+#else
+    const unsigned char * __restrict__ src = (const unsigned char * __restrict__)
+#endif
+    src_void + length - 1;
     while (unaligned(src))
     {
         if (!length)
