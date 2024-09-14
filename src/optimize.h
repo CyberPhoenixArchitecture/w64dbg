@@ -1,6 +1,6 @@
 #include <string.h>
 
-#ifdef __OPTIMIZE__
+#if !defined(_DEBUG) || defined(__OPTIMIZE__)
 
 #undef memcpy
 #undef strcpy
@@ -12,9 +12,9 @@
 ({ \
     if (__builtin_constant_p(_Src) || \
         __builtin_constant_p(_Size)) \
-        for (unsigned int i = 0; i < _Size; ++i) \
-            ((char *) __builtin_assume_aligned(_Dst, _Size << 3))[i] = \
-                ((const char *) __builtin_assume_aligned(_Src, _Size << 3))[i]; \
+        for (unsigned int _I = 0; _I < _Size; ++_I) \
+            ((char *) __builtin_assume_aligned(_Dst, _Size << 3))[_I] = \
+                ((const char *) __builtin_assume_aligned(_Src, _Size << 3))[_I]; \
     else __builtin_memcpy(_Dst, _Src, _Size); \
     _Dst; \
 })
