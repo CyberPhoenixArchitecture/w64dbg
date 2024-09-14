@@ -64,6 +64,10 @@ QUICKREF
    to fill (long)MASK. */
 #define DETECTCHAR(X,MASK) (DETECTNULL(X ^ MASK))
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((access(read_only, 1), always_inline, nonnull(1), pure))
+#endif
+
 static inline void *memrchr(const void *src_void, int c, size_t length)
 {
 #ifdef _MSC_VER
