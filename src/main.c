@@ -12,8 +12,8 @@
 #include "memrchr.c"
 #include "optimize.h"
 
-#define MAX_THREAD 256
-#define MAX_DLL 64
+#define MAX_THREAD 64
+#define MAX_DLL 16
 #define GNU 2
 #define LATENCY 99
 
