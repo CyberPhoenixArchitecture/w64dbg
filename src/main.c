@@ -17,9 +17,9 @@
 #define GNU 2
 #define LATENCY 99
 
-#define SymOptions (SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_ANYTHING  | SYMOPT_AUTO_PUBLICS | SYMOPT_INCLUDE_32BIT_MODULES)
-#define _DebugSymOptions (SymOptions | SYMOPT_LOAD_LINES)
+#define SymOptions (SYMOPT_IGNORE_CVREC | SYMOPT_IGNORE_IMAGEDIR | SYMOPT_LOAD_ANYTHING | SYMOPT_NO_IMAGE_SEARCH | SYMOPT_DEFERRED_LOADS | SYMOPT_DISABLE_SYMSRV_AUTODETECT | SYMOPT_AUTO_PUBLICS | SYMOPT_INCLUDE_32BIT_MODULES)
 #define NDebugSymOptions (SymOptions | SYMOPT_NO_CPP)
+#define _DebugSymOptions (SymOptions | SYMOPT_LOAD_LINES)
 
 #define GCXX_RUNTIME_EXCEPTION 541541187
 
@@ -31,13 +31,21 @@ __attribute__((leaf, no_stack_protector, nothrow))
 #endif
 #endif
 
-static VOID WINAPI CompletedWriteRoutine(DWORD dwErr, DWORD cbWritten, LPOVERLAPPED lpOverLap) {}
+VOID WINAPI CompletedWriteRoutine(DWORD dwErr, DWORD cbWritten, LPOVERLAPPED lpOverLap) {}
 
 #if defined(__GNUC__) || defined(__clang__)
 #if defined(_DEBUG) && !defined(__OPTIMIZE__)
 __attribute__((access(read_only, 2), no_stack_protector, nothrow))
 #else
 __attribute__((access(read_only, 2), flatten, no_stack_protector, nothrow))
+#endif
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(_DEBUG) && !defined(__OPTIMIZE__)
+__attribute__((access(read_only, 2), no_stack_protector, nothrow))
+#else
+__attribute__((access(read_only, 2), flatten, no_stack_protector, nothrow, simd))
 #endif
 #endif
 
@@ -203,6 +211,18 @@ int main(int argc, char *argv[])
     CloseHandle(DebugEvent.u.CreateProcessInfo.hProcess);
     CloseHandle(DebugEvent.u.CreateProcessInfo.hThread);
     ContinueDebugEvent(DebugEvent.dwProcessId, DebugEvent.dwThreadId, DBG_CONTINUE);
+    if (verbose)
+    {
+        memcpy(buffer, "CreateProcess ", 14);
+        _ultoa(DebugEvent.dwProcessId, buffer + 14, 10);
+        temp = strlen(buffer + 14);
+        buffer[14 + temp] = 'x';
+        _ultoa(DebugEvent.dwThreadId, buffer + 15 + temp, 10);
+        temp += strlen(buffer + 15 + temp);
+        buffer[15 + temp] = '\n';
+        WriteFileEx(hStderr, buffer, 16 + temp, &Overlapped,
+            (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
+    }
     hThread[0] = processInfo.hThread;
     dwThreadId[0] = processInfo.dwThreadId;
     lpBaseOfDll[0] = DebugEvent.u.CreateProcessInfo.lpBaseOfImage;
@@ -266,7 +286,7 @@ int main(int argc, char *argv[])
                         _ultoa(DebugEvent.dwThreadId, buffer + 14 + temp, 10);
                         temp += strlen(buffer + 14 + temp);
                         buffer[14 + temp] = '\n';
-                        WriteFileEx(hStderr, buffer, 14 + temp, &Overlapped,
+                        WriteFileEx(hStderr, buffer, 15 + temp, &Overlapped,
                             (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                     }
                     hThread[i] = DebugEvent.u.CreateThread.hThread;
@@ -288,7 +308,7 @@ int main(int argc, char *argv[])
                         _ultoa(DebugEvent.dwThreadId, buffer + 12 + temp, 10);
                         temp += strlen(buffer + 12 + temp);
                         buffer[12 + temp] = '\n';
-                        WriteFileEx(hStderr, buffer, 12 + temp, &Overlapped,
+                        WriteFileEx(hStderr, buffer, 13 + temp, &Overlapped,
                             (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
                     }
                     dwThreadId[i] = 0;
@@ -821,10 +841,14 @@ int main(int argc, char *argv[])
                             {
                                 if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
                                     &dwRead, NULL) == 0) || !dwRead) break;
-                                str = (char *) memchr(_buffer, '#', dwRead);
-                                if (str == NULL)
+                                _buffer[dwRead] = '\0';
+                                str = strstr(_buffer, "\n#") + 1;
+                                if (str == (char *) 1)
                                 {
-                                    if (memcmp(_buffer, "(gdb)", 5) == 0) break;
+                                    if (_buffer[0] == '#')
+                                        str = _buffer;
+                                    else if ((*(unsigned long long *) _buffer & 177744406312) == 177744406312)
+                                        break;
                                     else continue;
                                 }
                                 while (TRUE)
@@ -1064,10 +1088,14 @@ int main(int argc, char *argv[])
                             {
                                 if ((ReadFile(hStdoutReadPipe, _buffer, sizeof(_buffer),
                                     &dwRead, NULL) == 0) || !dwRead) break;
-                                str = (char *) memchr(_buffer, '#', dwRead);
+                                _buffer[dwRead] = '\0';
+                                str = strstr(_buffer, "\n#") + 1;
                                 if (str == (char *) 1)
                                 {
-                                    if (memcmp(_buffer, "(gdb)", 5) == 0) break;
+                                    if (_buffer[0] == '#')
+                                        str = _buffer;
+                                    else if ((*(unsigned long long *) _buffer & 177744406312) == 177744406312)
+                                        break;
                                     else continue;
                                 }
                                 while (TRUE)
@@ -1094,6 +1122,19 @@ int main(int argc, char *argv[])
                                 }
                             }
                         }
+                        if (verbose)
+                        {
+                            memcpy(p, "ExitProcess ", 12);
+                            p += 12;
+                            _ultoa(DebugEvent.dwProcessId, p, 10);
+                            p += strlen(p);
+                            *p = 'x';
+                            ++p;
+                            _ultoa(DebugEvent.dwThreadId, p, 10);
+                            p += strlen(p);
+                            *p = '\n';
+                            ++p;
+                        }
                         WriteFileEx(hStderr,
                             buffer, p - buffer, &Overlapped,
                             (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
@@ -1110,6 +1151,8 @@ int main(int argc, char *argv[])
                             CloseHandle(hThread[i]);
                             break;
                         }
+                        TerminateProcess(GDBInfo.hProcess, 0);
+                        CloseHandle(GDBInfo.hProcess);
                         if (timeout)
                         {
                             /* ---------------- DECLARATION ---------------- */
@@ -1148,8 +1191,6 @@ int main(int argc, char *argv[])
                                 }
                             }
                         }
-                        TerminateProcess(GDBInfo.hProcess, 0);
-                        CloseHandle(GDBInfo.hProcess);
                         return 0;
                     }
                     else if (verbose)
@@ -1158,7 +1199,6 @@ int main(int argc, char *argv[])
                         p += 36;
                     }
                 }
-                *p = '\0';
                 WriteFileEx(hStderr,
                     buffer, p - buffer, &Overlapped,
                     (LPOVERLAPPED_COMPLETION_ROUTINE) CompletedWriteRoutine);
