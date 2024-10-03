@@ -1,42 +1,11 @@
-/*
-FUNCTION
-    <<memrchr>>---reverse search for character in memory
-
-INDEX
-    memrchr
-
-SYNOPSIS
-    #include <string.h>
-    void *memrchr(const void *<[src]>, int <[c]>, size_t <[length]>);
-
-DESCRIPTION
-    This function searches memory starting at <[length]> bytes
-    beyond <<*<[src]>>> backwards for the character <[c]>.
-    The search only ends with the first occurrence of <[c]>; in
-    particular, <<NUL>> does not terminate the search.
-
-RETURNS
-    If the character <[c]> is found within <[length]> characters
-    of <<*<[src]>>>, a pointer to the character is returned. If
-    <[c]> is not found, then <<NULL>> is returned.
-
-PORTABILITY
-<<memrchr>> is a GNU extension.
-
-<<memrchr>> requires no supporting OS subroutines.
-
-QUICKREF
-    memrchr
-*/
-
 #include <string.h>
 #include <limits.h>
 
 /* Nonzero if X is not aligned on a "long" boundary.  */
 #ifdef __i386__
-#define unaligned(X) ((unsigned long)(X + 1) & (sizeof(long) - 1))
+#define unaligned(X) ((unsigned long)(X) & (sizeof(long) - 1))
 #else
-#define unaligned(X) ((unsigned long long)(X + 1) & (sizeof(long) - 1))
+#define unaligned(X) ((unsigned long long)(X) & (sizeof(long) - 1))
 #endif
 
 /* How many bytes are loaded each iteration of the word copy loop.  */
@@ -65,11 +34,12 @@ QUICKREF
 #define DETECTCHAR(X,MASK) (DETECTNULL(X ^ MASK))
 
 #if defined(__GNUC__) || defined(__clang__)
-__attribute__((access(read_only, 1), always_inline, nonnull(1), pure))
+__attribute__((access(read_only, 1), always_inline, no_stack_protector, nonnull(1), nothrow, pure))
 #endif
 
 static inline void *memrchr(const void *src_void, int c, size_t length)
 {
+    if (!length) return NULL;
 #ifdef _MSC_VER
     const unsigned char * __restrict src = (const unsigned char * __restrict)
 #else
@@ -85,7 +55,6 @@ static inline void *memrchr(const void *src_void, int c, size_t length)
         --length;
         --src;
     }
-    unsigned int i;
     unsigned long mask;
     unsigned long *asrc;
     if (length >= LBLOCKSIZE)
@@ -93,8 +62,6 @@ static inline void *memrchr(const void *src_void, int c, size_t length)
         asrc = (unsigned long *) (src - LBLOCKSIZE + 1);
         mask = c << 8 | c;
         mask = mask << 16 | mask;
-        for (i = 32; i < LBLOCKSIZE * 8; i <<= 1)
-            mask = (mask << i) | mask;
         while (length >= LBLOCKSIZE)
         {
             if (DETECTCHAR(*asrc, mask))
