@@ -1,6 +1,8 @@
 #pragma once
 #include <string.h>
 
+#if !defined(_DEBUG) || defined(__OPTIMIZE__)
+
 #ifdef __SSE__
 #if defined(__GNUC__) || defined(__clang__)
 #undef memcpy
@@ -72,4 +74,6 @@ static inline void *quark_strcpy(void *_Dst, void *_Src)
 #define memset(_Str, _C, _N) quark_memset(_Str, _C, _N)
 #define strcpy(_Dst, _Src, _Size) quark_strcpy(_Dst, _Src, _Size)
 #endif
+#endif
+
 #endif
