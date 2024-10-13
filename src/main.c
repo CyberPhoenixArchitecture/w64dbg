@@ -37,16 +37,13 @@ VOID WINAPI CompletedWriteRoutine(DWORD dwErr, DWORD cbWritten, LPOVERLAPPED lpO
 #if defined(_DEBUG) && !defined(__OPTIMIZE__)
 __attribute__((access(read_only, 2), no_stack_protector, nothrow))
 #else
-__attribute__((access(read_only, 2), flatten, no_stack_protector, nothrow))
+__attribute__((access(read_only, 2), flatten, no_stack_protector, nothrow, simd))
 #endif
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-#if defined(_DEBUG) && !defined(__OPTIMIZE__)
-__attribute__((access(read_only, 2), no_stack_protector, nothrow))
-#else
-__attribute__((access(read_only, 2), flatten, no_stack_protector, nothrow, simd))
-#endif
+#ifdef _M_ARM64
+WINBASEAPI WINBOOL WINAPI IsWow64Process2 (HANDLE hProcess, USHORT *pProcessMachine, USHORT *pNativeMachine);
+typedef BOOL (WINAPI * PFN_GETPROCESSINFORMATION)(HANDLE, PROCESS_INFORMATION_CLASS, LPVOID, DWORD);
 #endif
 
 int main(int argc, char *argv[])
@@ -367,8 +364,9 @@ int main(int argc, char *argv[])
                         {
                             ReadConsoleInputA(hStdin, &InputRecord, 1, &count);
                             if (InputRecord.EventType == KEY_EVENT &&
-                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
-                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
+                                InputRecord.Event.KeyEvent.bKeyDown &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL)
                                 break;
                         }
                     else
@@ -383,9 +381,10 @@ int main(int argc, char *argv[])
                                 break;
                             ReadConsoleInputA(hStdin, &InputRecord, 1, &count);
                             if (InputRecord.EventType == KEY_EVENT &&
-                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL &&
-                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU)
-                                break;
+                                InputRecord.Event.KeyEvent.bKeyDown &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_MENU &&
+                                InputRecord.Event.KeyEvent.wVirtualKeyCode != VK_CONTROL)
+                            break;
                         }
                     }
                 }
@@ -470,7 +469,9 @@ int main(int argc, char *argv[])
                 p = buffer + 8 + strlen(buffer + 8);
                 memcpy(p, " caused ", 8);
                 p += 8;
-                IsWow64Process(processInfo.hProcess, &bWow64);
+#ifndef _M_ARM64
+                IsWow64Process(hProcess, &bWow64);
+#endif
                 p = FormatDebugException(&DebugEvent, p, _buffer, bWow64);
                 *p = '\n';
                 ++p;
@@ -505,6 +506,38 @@ int main(int argc, char *argv[])
                     }
                 }
                 //memset(&StackFrame, 0, sizeof(StackFrame));
+#ifdef _M_ARM64
+                USHORT processArch, nativeArch;
+                IsWow64Process2(processInfo.hProcess, &processArch, &nativeArch);
+                if (processArch == IMAGE_FILE_MACHINE_UNKNOWN)
+                {
+                    PROCESS_MACHINE_INFORMATION processMachineInfo = {};
+                    HMODULE hKernelModule = GetModuleHandleA("kernel32");
+                    PFN_GETPROCESSINFORMATION pfnGetProcessInformation =
+                    (PFN_GETPROCESSINFORMATION)GetProcAddress(hKernelModule, "GetProcessInformation");
+                    if (pfnGetProcessInformation(processInfo.hProcess, ProcessMachineTypeInfo, &processMachineInfo, sizeof processMachineInfo))
+                    {
+                        processArch = processMachineInfo.ProcessMachine;
+                    } else processArch = nativeArch;
+                }
+                if (processArch == IMAGE_FILE_MACHINE_ARM64 ||
+                    processArch == IMAGE_FILE_MACHINE_AMD64)
+                {
+                    // XXX: Unfortunate pContext is _not_ an AMD64 context, so StackWalk will fail
+                    GetThreadContext(hThread[i], &Context);
+                    MachineType = IMAGE_FILE_MACHINE_ARM64;
+                    StackFrame.AddrPC.Offset = Context.Pc;
+                    StackFrame.AddrStack.Offset = Context.Sp;
+                    StackFrame.AddrFrame.Offset = Context.Fp;
+                } else
+                {
+                    MachineType = IMAGE_FILE_MACHINE_I386;
+                    Wow64GetThreadContext(hThread[i], (PWOW64_CONTEXT) &Context);
+                    StackFrame.AddrPC.Offset = ((PWOW64_CONTEXT) &Context)->Eip;
+                    StackFrame.AddrStack.Offset = ((PWOW64_CONTEXT) &Context)->Esp;
+                    StackFrame.AddrFrame.Offset = ((PWOW64_CONTEXT) &Context)->Ebp;
+                }
+#else
                 if (bWow64)
                 {
                     ((PWOW64_CONTEXT) &Context)->ContextFlags = WOW64_CONTEXT_ALL;
@@ -523,6 +556,7 @@ int main(int argc, char *argv[])
                     StackFrame.AddrStack.Offset = Context.Rsp;
                     StackFrame.AddrFrame.Offset = Context.Rbp;
                 }
+#endif
                 StackFrame.AddrPC.Mode = AddrModeFlat;
                 StackFrame.AddrStack.Mode = AddrModeFlat;
                 StackFrame.AddrFrame.Mode = AddrModeFlat;
@@ -953,7 +987,7 @@ int main(int argc, char *argv[])
                                             _ptr = (char *) memchr(ptr, ',', str + temp - ptr);
                                             if (_ptr == NULL)
                                             {
-                                                _ptr = (char *) memchr(ptr, ')', str + temp - ptr);
+                                                _ptr = (char *) memrchr(ptr, ')', str + temp - ptr);
                                                 memcpy(p, ptr, _ptr - ptr);
                                                 p += _ptr - ptr;
                                             } else
